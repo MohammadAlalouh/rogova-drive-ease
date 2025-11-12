@@ -115,6 +115,11 @@ export default function AdminDashboard() {
     paymentStatus: "unpaid" as string,
     amountReceived: "" as string
   });
+  const [receiptDialog, setReceiptDialog] = useState({
+    open: false,
+    service: null as CompletedService | null,
+    email: "",
+  });
   const [groupBy, setGroupBy] = useState<"month" | "staff">("month");
   const [staffExportDialogOpen, setStaffExportDialogOpen] = useState(false);
   const [staffDialogOpen, setStaffDialogOpen] = useState(false);
@@ -898,15 +903,8 @@ export default function AdminDashboard() {
 
       if (error) throw error;
 
-      // Update local state with all changes
-      setCompletedServices(prev => 
-        prev.map(cs => cs.id === serviceId ? { ...cs, ...updateData } : cs)
-      );
-
-      toast({
-        title: "Updated",
-        description: "Field updated successfully",
-      });
+      toast({ title: "Field updated successfully" });
+      fetchCompletedServices();
     } catch (error: any) {
       toast({
         title: "Error updating field",
@@ -919,21 +917,88 @@ export default function AdminDashboard() {
   const markRecordComplete = async (serviceId: string) => {
     try {
       const { error } = await supabase
-        .from('completed_services')
+        .from("completed_services")
         .update({ is_record_complete: true })
-        .eq('id', serviceId);
+        .eq("id", serviceId);
+
+      if (error) {
+        toast({
+          title: "Error",
+          description: "Failed to complete record",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      toast({
+        title: "Success",
+        description: "Record marked as complete and locked",
+      });
+      fetchCompletedServices();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const openReceiptDialog = (service: CompletedService) => {
+    setReceiptDialog({
+      open: true,
+      service,
+      email: service.customer_email || "",
+    });
+  };
+
+  const sendReceipt = async () => {
+    if (!receiptDialog.service || !receiptDialog.email) {
+      toast({
+        title: "Error",
+        description: "Please provide a valid email address",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase.functions.invoke("send-receipt-email", {
+        body: {
+          completedServiceId: receiptDialog.service.id,
+          customerEmail: receiptDialog.email,
+        },
+      });
 
       if (error) throw error;
 
-      fetchData();
-
       toast({
-        title: "Record completed",
-        description: "This record is now immutable",
+        title: "Receipt sent",
+        description: "Receipt email sent successfully!",
       });
+      setReceiptDialog({ open: false, service: null, email: "" });
+    } catch (error: any) {
+      console.error("Error sending receipt:", error);
+      toast({
+        title: "Error sending receipt",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const fetchCompletedServices = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('completed_services')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setCompletedServices(data as any || []);
     } catch (error: any) {
       toast({
-        title: "Error completing record",
+        title: "Error loading completed services",
         description: error.message,
         variant: "destructive",
       });
@@ -2299,18 +2364,24 @@ export default function AdminDashboard() {
                                         )}
                                       </TableCell>
                                       <TableCell>
-                                        {isEditable ? (
+                                        <div className="flex gap-2">
                                           <Button
-                                            size="sm"
+                                            onClick={() => openReceiptDialog(cs)}
                                             variant="outline"
-                                            onClick={() => markRecordComplete(cs.id)}
+                                            size="sm"
                                           >
-                                            <CheckCircle className="h-4 w-4 mr-1" />
-                                            Complete
+                                            Send Receipt
                                           </Button>
-                                        ) : (
-                                          <Badge variant="secondary">Locked</Badge>
-                                        )}
+                                          {isEditable && (
+                                            <Button
+                                              onClick={() => markRecordComplete(cs.id)}
+                                              variant="outline"
+                                              size="sm"
+                                            >
+                                              Complete
+                                            </Button>
+                                          )}
+                                        </div>
                                       </TableCell>
                                     </TableRow>
                                   );
@@ -2592,6 +2663,117 @@ export default function AdminDashboard() {
       </Tabs>
         </div>
       </section>
+
+      {/* Receipt Email Dialog */}
+      <Dialog open={receiptDialog.open} onOpenChange={(open) => setReceiptDialog({ ...receiptDialog, open })}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Send Receipt</DialogTitle>
+          </DialogHeader>
+          {receiptDialog.service && (
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="receipt-email">Customer Email</Label>
+                <Input
+                  id="receipt-email"
+                  type="email"
+                  value={receiptDialog.email}
+                  onChange={(e) => setReceiptDialog({ ...receiptDialog, email: e.target.value })}
+                  placeholder="customer@example.com"
+                />
+              </div>
+
+              <div className="border rounded-lg p-4 bg-muted/30">
+                <h3 className="font-semibold mb-3">Receipt Preview</h3>
+                <div className="space-y-2 text-sm">
+                  <p><strong>Customer:</strong> {receiptDialog.service.customer_name}</p>
+                  <p><strong>Vehicle:</strong> {receiptDialog.service.car_year} {receiptDialog.service.car_make} {receiptDialog.service.car_model}</p>
+                  <p><strong>Completion Date:</strong> {new Date(receiptDialog.service.created_at).toLocaleDateString()}</p>
+                  <p><strong>Hours Worked:</strong> {receiptDialog.service.hours_worked}</p>
+                </div>
+
+                <div className="mt-4">
+                  <h4 className="font-medium mb-2">Services</h4>
+                  <ul className="text-sm space-y-1">
+                    {receiptDialog.service.services_performed?.map((service: any, idx: number) => (
+                      <li key={idx} className="flex justify-between">
+                        <span>{service.service}</span>
+                        <span>${service.cost?.toFixed(2)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="mt-4">
+                  <h4 className="font-medium mb-2">Items</h4>
+                  <ul className="text-sm space-y-1">
+                    {receiptDialog.service.items_purchased?.map((item: any, idx: number) => (
+                      <li key={idx} className="flex justify-between">
+                        <span>{item.name}</span>
+                        <span>${item.cost?.toFixed(2)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="mt-4 pt-4 border-t space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span>Subtotal:</span>
+                    <span>${receiptDialog.service.subtotal?.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-green-600">
+                    <span>Discount:</span>
+                    <span>-${receiptDialog.service.discount?.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Tax:</span>
+                    <span>${receiptDialog.service.taxes?.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between font-bold text-base pt-2 border-t">
+                    <span>Total:</span>
+                    <span>${receiptDialog.service.total_cost?.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-green-600 font-semibold">
+                    <span>Amount Paid:</span>
+                    <span>${receiptDialog.service.amount_received?.toFixed(2)}</span>
+                  </div>
+                  {receiptDialog.service.remaining_balance > 0 && (
+                    <div className="flex justify-between text-red-600 font-semibold">
+                      <span>Remaining Balance:</span>
+                      <span>${receiptDialog.service.remaining_balance?.toFixed(2)}</span>
+                    </div>
+                  )}
+                  <div className="mt-2 pt-2 border-t">
+                    <span className={`inline-block px-3 py-1 rounded text-white text-xs font-semibold ${
+                      receiptDialog.service.payment_status === 'paid' ? 'bg-green-600' :
+                      receiptDialog.service.payment_status === 'partial paid' ? 'bg-orange-600' :
+                      'bg-red-600'
+                    }`}>
+                      {receiptDialog.service.payment_status?.toUpperCase()}
+                    </span>
+                  </div>
+                </div>
+
+                {receiptDialog.service.notes && (
+                  <div className="mt-4 pt-4 border-t">
+                    <h4 className="font-medium mb-2">Notes</h4>
+                    <p className="text-sm text-muted-foreground">{receiptDialog.service.notes}</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setReceiptDialog({ open: false, service: null, email: "" })}>
+                  Cancel
+                </Button>
+                <Button onClick={sendReceipt}>
+                  Send Receipt
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <footer className="bg-foreground text-background py-8">
         <div className="container text-center">
