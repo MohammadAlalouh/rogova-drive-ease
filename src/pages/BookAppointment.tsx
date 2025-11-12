@@ -8,8 +8,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Checkbox } from "@/components/ui/checkbox";
 import { Calendar } from "@/components/ui/calendar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useNavigate } from "react-router-dom";
 import { z } from "zod";
 
 const bookingSchema = z.object({
@@ -36,7 +38,17 @@ export default function BookAppointment() {
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  
+  // Lookup appointment states
+  const [lookupEmail, setLookupEmail] = useState("");
+  const [lookupPhone, setLookupPhone] = useState("");
+  const [lookupConfirmation, setLookupConfirmation] = useState("");
+  const [foundAppointment, setFoundAppointment] = useState<any>(null);
+  const [lookingUp, setLookingUp] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   const timeSlots = [
     "09:00", "09:30", "10:00", "10:30", "11:00", "11:30",
@@ -207,6 +219,144 @@ export default function BookAppointment() {
     }
   };
 
+  const handleLookupAppointment = async () => {
+    if (!lookupConfirmation || (!lookupEmail && !lookupPhone)) {
+      toast({
+        title: "Missing information",
+        description: "Please provide confirmation number and either email or phone",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setLookingUp(true);
+    try {
+      let query = supabase
+        .from('appointments')
+        .select('*')
+        .eq('confirmation_number', lookupConfirmation.toUpperCase())
+        .neq('status', 'cancelled');
+
+      if (lookupEmail) {
+        query = query.eq('customer_email', lookupEmail);
+      } else if (lookupPhone) {
+        query = query.eq('customer_phone', lookupPhone);
+      }
+
+      const { data, error } = await query.maybeSingle();
+
+      if (error) throw error;
+
+      if (!data) {
+        toast({
+          title: "Appointment not found",
+          description: "No appointment found with the provided information",
+          variant: "destructive",
+        });
+        setFoundAppointment(null);
+      } else {
+        setFoundAppointment(data);
+        toast({
+          title: "Appointment found!",
+          description: "You can now view, edit, or cancel your appointment",
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error looking up appointment",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setLookingUp(false);
+    }
+  };
+
+  const handleUpdateAppointment = async () => {
+    if (!foundAppointment) return;
+
+    try {
+      const validation = bookingSchema.parse({ 
+        name: foundAppointment.customer_name, 
+        email: foundAppointment.customer_email, 
+        phone: foundAppointment.customer_phone, 
+        notes: foundAppointment.notes 
+      });
+
+      const { error } = await supabase
+        .from('appointments')
+        .update({
+          customer_name: validation.name,
+          customer_email: validation.email,
+          customer_phone: validation.phone,
+          appointment_date: foundAppointment.appointment_date,
+          appointment_time: foundAppointment.appointment_time,
+          notes: validation.notes,
+        })
+        .eq('id', foundAppointment.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Appointment updated!",
+        description: "Your appointment has been successfully updated",
+      });
+      setEditMode(false);
+    } catch (error: any) {
+      toast({
+        title: "Error updating appointment",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleCancelAppointment = async () => {
+    if (!foundAppointment) return;
+
+    try {
+      const { error } = await supabase
+        .from('appointments')
+        .update({ status: 'cancelled' })
+        .eq('id', foundAppointment.id);
+
+      if (error) throw error;
+
+      // Send cancellation email
+      const selectedServiceNames = services
+        .filter(s => foundAppointment.service_ids.includes(s.id))
+        .map(s => s.name);
+
+      await supabase.functions.invoke('send-appointment-email', {
+        body: {
+          to: foundAppointment.customer_email,
+          customerName: foundAppointment.customer_name,
+          confirmationNumber: foundAppointment.confirmation_number,
+          appointmentDate: new Date(foundAppointment.appointment_date).toLocaleDateString(),
+          appointmentTime: foundAppointment.appointment_time,
+          services: selectedServiceNames,
+          action: 'cancel',
+        }
+      });
+
+      toast({
+        title: "Appointment cancelled",
+        description: "Your appointment has been cancelled successfully",
+      });
+      
+      setFoundAppointment(null);
+      setLookupEmail("");
+      setLookupPhone("");
+      setLookupConfirmation("");
+    } catch (error: any) {
+      toast({
+        title: "Error cancelling appointment",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <Navigation />
@@ -216,11 +366,18 @@ export default function BookAppointment() {
           <div className="text-center mb-12">
             <h1 className="text-4xl md:text-5xl font-bold mb-4">Book Your Appointment</h1>
             <p className="text-xl text-muted-foreground">
-              Select your services, choose a time, and we'll take care of the rest
+              Select your services, choose a time, and manage your bookings
             </p>
           </div>
 
-          <Card className="shadow-strong">
+          <Tabs defaultValue="book" className="w-full">
+            <TabsList className="grid w-full grid-cols-2 mb-8">
+              <TabsTrigger value="book">Book New Appointment</TabsTrigger>
+              <TabsTrigger value="manage">Manage Appointment</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="book">
+              <Card className="shadow-strong">
             <CardHeader>
               <CardTitle>Appointment Details</CardTitle>
               <CardDescription>
@@ -344,14 +501,187 @@ export default function BookAppointment() {
               </form>
             </CardContent>
           </Card>
+            </TabsContent>
+
+            <TabsContent value="manage">
+              <Card className="shadow-strong">
+                <CardHeader>
+                  <CardTitle>Looking for Your Appointment?</CardTitle>
+                  <CardDescription>
+                    Enter your confirmation number and contact information to view, edit, or cancel your appointment
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {!foundAppointment ? (
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="lookupConfirmation">Confirmation Number *</Label>
+                        <Input
+                          id="lookupConfirmation"
+                          placeholder="CONF-XXXXXXXX"
+                          value={lookupConfirmation}
+                          onChange={(e) => setLookupConfirmation(e.target.value.toUpperCase())}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="lookupEmail">Email Address</Label>
+                        <Input
+                          id="lookupEmail"
+                          type="email"
+                          placeholder="your@email.com"
+                          value={lookupEmail}
+                          onChange={(e) => setLookupEmail(e.target.value)}
+                        />
+                      </div>
+
+                      <div className="text-center text-muted-foreground">OR</div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="lookupPhone">Phone Number</Label>
+                        <Input
+                          id="lookupPhone"
+                          type="tel"
+                          placeholder="(123) 456-7890"
+                          value={lookupPhone}
+                          onChange={(e) => setLookupPhone(e.target.value)}
+                        />
+                      </div>
+
+                      <Button
+                        onClick={handleLookupAppointment}
+                        disabled={lookingUp}
+                        className="w-full bg-accent hover:bg-accent/90"
+                      >
+                        {lookingUp ? "Looking up..." : "Find My Appointment"}
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-6">
+                      <div className="p-4 bg-muted rounded-lg space-y-3">
+                        <div>
+                          <Label className="text-muted-foreground">Confirmation Number</Label>
+                          <p className="font-semibold">{foundAppointment.confirmation_number}</p>
+                        </div>
+                        <div>
+                          <Label className="text-muted-foreground">Status</Label>
+                          <p className="font-semibold capitalize">{foundAppointment.status}</p>
+                        </div>
+                        <div>
+                          <Label className="text-muted-foreground">Date & Time</Label>
+                          <p className="font-semibold">
+                            {new Date(foundAppointment.appointment_date).toLocaleDateString()} at {foundAppointment.appointment_time}
+                          </p>
+                        </div>
+                      </div>
+
+                      {editMode ? (
+                        <div className="space-y-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="editName">Name</Label>
+                            <Input
+                              id="editName"
+                              value={foundAppointment.customer_name}
+                              onChange={(e) => setFoundAppointment({...foundAppointment, customer_name: e.target.value})}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="editEmail">Email</Label>
+                            <Input
+                              id="editEmail"
+                              type="email"
+                              value={foundAppointment.customer_email}
+                              onChange={(e) => setFoundAppointment({...foundAppointment, customer_email: e.target.value})}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="editPhone">Phone</Label>
+                            <Input
+                              id="editPhone"
+                              type="tel"
+                              value={foundAppointment.customer_phone}
+                              onChange={(e) => setFoundAppointment({...foundAppointment, customer_phone: e.target.value})}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="editNotes">Notes</Label>
+                            <Textarea
+                              id="editNotes"
+                              value={foundAppointment.notes || ""}
+                              onChange={(e) => setFoundAppointment({...foundAppointment, notes: e.target.value})}
+                            />
+                          </div>
+                          <div className="flex gap-2">
+                            <Button onClick={handleUpdateAppointment} className="flex-1 bg-accent hover:bg-accent/90">
+                              Save Changes
+                            </Button>
+                            <Button onClick={() => setEditMode(false)} variant="outline" className="flex-1">
+                              Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          <div className="space-y-2">
+                            <Label>Customer Name</Label>
+                            <p>{foundAppointment.customer_name}</p>
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Email</Label>
+                            <p>{foundAppointment.customer_email}</p>
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Phone</Label>
+                            <p>{foundAppointment.customer_phone}</p>
+                          </div>
+                          {foundAppointment.notes && (
+                            <div className="space-y-2">
+                              <Label>Notes</Label>
+                              <p>{foundAppointment.notes}</p>
+                            </div>
+                          )}
+                          <div className="flex gap-2">
+                            <Button onClick={() => setEditMode(true)} variant="outline" className="flex-1">
+                              Edit Appointment
+                            </Button>
+                            <Button onClick={handleCancelAppointment} variant="destructive" className="flex-1">
+                              Cancel Appointment
+                            </Button>
+                          </div>
+                          <Button 
+                            onClick={() => {
+                              setFoundAppointment(null);
+                              setLookupEmail("");
+                              setLookupPhone("");
+                              setLookupConfirmation("");
+                            }} 
+                            variant="ghost" 
+                            className="w-full"
+                          >
+                            Look Up Another Appointment
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
         </div>
       </section>
 
       <footer className="bg-foreground text-background py-8">
-        <div className="container text-center">
+        <div className="container text-center space-y-2">
           <p className="text-sm">
             © 2025 Rogova Auto Shop. All rights reserved. | 37 Veronica Dr, Halifax, NS
           </p>
+          <button
+            onClick={() => navigate('/admin/login')}
+            className="text-sm text-background/70 hover:text-background underline"
+          >
+            ADMIN LOG IN
+          </button>
         </div>
       </footer>
     </div>
