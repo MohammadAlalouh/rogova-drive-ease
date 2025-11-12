@@ -2669,6 +2669,9 @@ export default function AdminDashboard() {
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Send Receipt</DialogTitle>
+            <DialogDescription>
+              Email receipt to customer with complete payment and service details
+            </DialogDescription>
           </DialogHeader>
           {receiptDialog.service && (
             <div className="space-y-4">

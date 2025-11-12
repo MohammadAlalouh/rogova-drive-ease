@@ -182,7 +182,11 @@ const handler = async (req: Request): Promise<Response> => {
 
     if (emailError) {
       console.error("Error sending email:", emailError);
-      throw emailError;
+      // Return a more user-friendly error message
+      if (emailError.message?.includes("verify a domain")) {
+        throw new Error("Email service is in test mode. Please verify your domain at resend.com/domains to send receipts to customers.");
+      }
+      throw new Error(emailError.message || "Failed to send email");
     }
 
     console.log("Receipt email sent successfully:", emailData);
