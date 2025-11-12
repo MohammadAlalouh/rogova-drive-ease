@@ -1017,7 +1017,198 @@ export default function AdminDashboard() {
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4">
-                  {/* ... keep existing code (completion form) */}
+                  <div>
+                    <Label>Services Performed</Label>
+                    {completionData.servicesPerformed.map((service, index) => (
+                      <div key={index} className="flex gap-2 mb-2">
+                        <Input
+                          placeholder="Service name"
+                          value={service.service}
+                          onChange={(e) => {
+                            const updated = [...completionData.servicesPerformed];
+                            updated[index].service = e.target.value;
+                            setCompletionData({ ...completionData, servicesPerformed: updated });
+                          }}
+                        />
+                        <Input
+                          type="number"
+                          placeholder="Cost"
+                          value={service.cost}
+                          onChange={(e) => {
+                            const updated = [...completionData.servicesPerformed];
+                            updated[index].cost = e.target.value;
+                            setCompletionData({ ...completionData, servicesPerformed: updated });
+                          }}
+                        />
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => {
+                            const updated = completionData.servicesPerformed.filter((_, i) => i !== index);
+                            setCompletionData({ ...completionData, servicesPerformed: updated });
+                          }}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setCompletionData({
+                          ...completionData,
+                          servicesPerformed: [...completionData.servicesPerformed, { service: "", cost: "" }]
+                        });
+                      }}
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Service
+                    </Button>
+                  </div>
+
+                  <div>
+                    <Label>Items Purchased</Label>
+                    {completionData.itemsPurchased.map((item, index) => (
+                      <div key={index} className="flex gap-2 mb-2">
+                        <Input
+                          placeholder="Item name"
+                          value={item.name}
+                          onChange={(e) => {
+                            const updated = [...completionData.itemsPurchased];
+                            updated[index].name = e.target.value;
+                            setCompletionData({ ...completionData, itemsPurchased: updated });
+                          }}
+                        />
+                        <Input
+                          type="number"
+                          placeholder="Cost"
+                          value={item.cost}
+                          onChange={(e) => {
+                            const updated = [...completionData.itemsPurchased];
+                            updated[index].cost = e.target.value;
+                            setCompletionData({ ...completionData, itemsPurchased: updated });
+                          }}
+                        />
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => {
+                            const updated = completionData.itemsPurchased.filter((_, i) => i !== index);
+                            setCompletionData({ ...completionData, itemsPurchased: updated });
+                          }}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setCompletionData({
+                          ...completionData,
+                          itemsPurchased: [...completionData.itemsPurchased, { name: "", cost: "" }]
+                        });
+                      }}
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Item
+                    </Button>
+                  </div>
+
+                  <div>
+                    <Label>Staff Members</Label>
+                    <div className="space-y-2 border rounded-md p-3 max-h-40 overflow-y-auto">
+                      {staff.filter(s => s.is_active).map((s) => (
+                        <div key={s.id} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`staff-${s.id}`}
+                            checked={completionData.selectedStaff.includes(s.id)}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setCompletionData({
+                                  ...completionData,
+                                  selectedStaff: [...completionData.selectedStaff, s.id]
+                                });
+                              } else {
+                                setCompletionData({
+                                  ...completionData,
+                                  selectedStaff: completionData.selectedStaff.filter(id => id !== s.id)
+                                });
+                              }
+                            }}
+                          />
+                          <Label htmlFor={`staff-${s.id}`} className="cursor-pointer">
+                            {s.name}
+                          </Label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label>Hours Worked</Label>
+                    <Input
+                      type="number"
+                      value={completionData.hoursWorked}
+                      onChange={(e) => setCompletionData({ ...completionData, hoursWorked: e.target.value })}
+                      placeholder="0"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label>Tax Rate (%)</Label>
+                      <Input
+                        type="number"
+                        value={completionData.taxRate}
+                        onChange={(e) => setCompletionData({ ...completionData, taxRate: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label>Discount ($)</Label>
+                      <Input
+                        type="number"
+                        value={completionData.discount}
+                        onChange={(e) => setCompletionData({ ...completionData, discount: e.target.value })}
+                        placeholder="0"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label>Payment Method</Label>
+                    <Select value={completionData.paymentMethod} onValueChange={(value) => setCompletionData({ ...completionData, paymentMethod: value })}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="cash">Cash</SelectItem>
+                        <SelectItem value="credit_card">Credit Card</SelectItem>
+                        <SelectItem value="debit_card">Debit Card</SelectItem>
+                        <SelectItem value="check">Check</SelectItem>
+                        <SelectItem value="other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label>Additional Notes</Label>
+                    <Textarea
+                      value={completionData.notes}
+                      onChange={(e) => setCompletionData({ ...completionData, notes: e.target.value })}
+                      placeholder="Any additional notes..."
+                    />
+                  </div>
+
+                  <Button 
+                    onClick={handleCompleteAppointment} 
+                    className="w-full"
+                    disabled={actionLoading === completingAppointment?.id}
+                  >
+                    {actionLoading === completingAppointment?.id ? "Completing..." : "Complete & Send Invoice"}
+                  </Button>
                 </div>
               </DialogContent>
             </Dialog>
