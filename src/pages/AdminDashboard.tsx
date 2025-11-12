@@ -108,6 +108,7 @@ export default function AdminDashboard() {
     paymentMethod: "cash" as string
   });
   const [groupBy, setGroupBy] = useState<"month" | "staff">("month");
+  const [staffExportDialogOpen, setStaffExportDialogOpen] = useState(false);
   const [staffDialogOpen, setStaffDialogOpen] = useState(false);
   const [editingStaff, setEditingStaff] = useState<Staff | null>(null);
   const [appointmentView, setAppointmentView] = useState<"all" | "by-day" | "today">("today");
@@ -1437,6 +1438,7 @@ export default function AdminDashboard() {
         description: `No completed services found for ${selectedStaff.name}`,
         variant: "destructive",
       });
+      setStaffExportDialogOpen(false);
       return;
     }
 
@@ -1486,6 +1488,8 @@ export default function AdminDashboard() {
     document.body.removeChild(a);
     window.URL.revokeObjectURL(url);
 
+    setStaffExportDialogOpen(false);
+    
     toast({
       title: "Export successful",
       description: `Staff hours for ${selectedStaff.name} downloaded`,
@@ -1917,7 +1921,7 @@ export default function AdminDashboard() {
                 </div>
               </div>
               <div className="flex gap-2">
-                <Dialog>
+                <Dialog open={staffExportDialogOpen} onOpenChange={setStaffExportDialogOpen}>
                   <DialogTrigger asChild>
                     <Button size="sm" variant="outline" disabled={completedServices.length === 0}>
                       <Download className="mr-0 sm:mr-2 h-4 w-4" />
@@ -1932,7 +1936,7 @@ export default function AdminDashboard() {
                     <div className="space-y-4 py-4">
                       <div className="space-y-2">
                         <Label>Select Staff</Label>
-                        <Select onValueChange={(value) => exportStaffHours(value)}>
+                        <Select onValueChange={exportStaffHours}>
                           <SelectTrigger>
                             <SelectValue placeholder="Choose staff member" />
                           </SelectTrigger>
