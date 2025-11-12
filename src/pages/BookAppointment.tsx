@@ -492,7 +492,7 @@ export default function BookAppointment() {
                       mode="single"
                       selected={date}
                       onSelect={setDate}
-                      disabled={(date) => date < new Date() || date.getDay() === 0}
+                      disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0)) || date.getDay() === 0}
                       className="rounded-md border p-2 md:p-3 pointer-events-auto w-full max-w-full"
                     />
                   </div>

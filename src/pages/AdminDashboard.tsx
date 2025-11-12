@@ -927,7 +927,7 @@ export default function AdminDashboard() {
                       mode="single"
                       selected={editDate}
                       onSelect={setEditDate}
-                      disabled={(date) => date < new Date()}
+                      disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
                       className="rounded-md border p-3"
                     />
                   </div>
