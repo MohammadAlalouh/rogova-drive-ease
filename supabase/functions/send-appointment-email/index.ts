@@ -1,4 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -6,26 +8,35 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-  interface AppointmentEmailRequest {
-  to: string;
-  customerName: string;
-  confirmationNumber: string;
-  appointmentDate: string;
-  appointmentTime: string;
-  services: string[];
-  action: 'booking' | 'update' | 'cancel' | 'in_progress' | 'complete';
-  notes?: string;
-  invoice?: {
-    servicesPerformed: Array<{ service: string; cost: number }>;
-    itemsPurchased?: Array<{ name: string; cost: number }>;
-    servicesSubtotal: number;
-    itemsSubtotal: number;
-    taxes: number;
-    taxRate: number;
-    discount: number;
-    totalCost: number;
-  };
-}
+// Input validation schema
+const appointmentEmailSchema = z.object({
+  to: z.string().email("Invalid email address"),
+  customerName: z.string().min(1).max(200),
+  confirmationNumber: z.string().min(1).max(50),
+  appointmentDate: z.string(),
+  appointmentTime: z.string(),
+  services: z.array(z.string()).min(1),
+  action: z.enum(['booking', 'update', 'cancel', 'in_progress', 'complete']),
+  notes: z.string().max(1000).optional(),
+  invoice: z.object({
+    servicesPerformed: z.array(z.object({
+      service: z.string(),
+      cost: z.number(),
+    })),
+    itemsPurchased: z.array(z.object({
+      name: z.string(),
+      cost: z.number(),
+    })).optional(),
+    servicesSubtotal: z.number(),
+    itemsSubtotal: z.number(),
+    taxes: z.number(),
+    taxRate: z.number(),
+    discount: z.number(),
+    totalCost: z.number(),
+  }).optional(),
+});
+
+type AppointmentEmailRequest = z.infer<typeof appointmentEmailSchema>;
 
 const handler = async (req: Request): Promise<Response> => {
   console.log("Function invoked, method:", req.method);
@@ -35,8 +46,78 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    const body: AppointmentEmailRequest = await req.json();
-    console.log("Request body received:", body);
+    // Initialize Supabase client
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Parse and validate input
+    const rawBody = await req.json();
+    const validationResult = appointmentEmailSchema.safeParse(rawBody);
+    
+    if (!validationResult.success) {
+      console.error("Validation error:", validationResult.error);
+      return new Response(
+        JSON.stringify({ 
+          success: false,
+          error: "Invalid request data"
+        }),
+        {
+          status: 400,
+          headers: {
+            "Content-Type": "application/json",
+            ...corsHeaders,
+          },
+        }
+      );
+    }
+
+    const body = validationResult.data;
+    console.log("Request validated, confirmation:", body.confirmationNumber);
+
+    // Verify appointment exists and matches the provided details
+    const { data: appointment, error: dbError } = await supabase
+      .from("appointments")
+      .select("id, customer_email, confirmation_number, status")
+      .eq("confirmation_number", body.confirmationNumber)
+      .single();
+
+    if (dbError || !appointment) {
+      console.error("Appointment not found:", body.confirmationNumber);
+      return new Response(
+        JSON.stringify({ 
+          success: false,
+          error: "Appointment not found"
+        }),
+        {
+          status: 404,
+          headers: {
+            "Content-Type": "application/json",
+            ...corsHeaders,
+          },
+        }
+      );
+    }
+
+    // Verify the email matches the appointment
+    if (appointment.customer_email !== body.to) {
+      console.error("Email mismatch for appointment:", body.confirmationNumber);
+      return new Response(
+        JSON.stringify({ 
+          success: false,
+          error: "Invalid request"
+        }),
+        {
+          status: 403,
+          headers: {
+            "Content-Type": "application/json",
+            ...corsHeaders,
+          },
+        }
+      );
+    }
+
+    console.log("Appointment verified:", appointment.id);
 
     const { to, customerName, confirmationNumber, appointmentDate, appointmentTime, services, action, notes, invoice } = body;
 
@@ -245,12 +326,18 @@ const handler = async (req: Request): Promise<Response> => {
       },
     );
   } catch (error: any) {
-    console.error("ERROR in send-appointment-email:", error);
+    // Log detailed error server-side only
+    console.error("ERROR in send-appointment-email:", {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    });
+    
+    // Return generic error to client
     return new Response(
       JSON.stringify({ 
         success: false,
-        error: error.message,
-        stack: error.stack 
+        error: "Failed to send email. Please try again later."
       }),
       {
         status: 500,
