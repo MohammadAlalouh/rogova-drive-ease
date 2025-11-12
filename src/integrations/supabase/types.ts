@@ -87,6 +87,7 @@ export type Database = {
           notes: string | null
           payment_method: Database["public"]["Enums"]["payment_method"]
           services_performed: Json | null
+          staff_hours: Json | null
           staff_ids: string[] | null
           subtotal: number | null
           taxes: number | null
@@ -111,6 +112,7 @@ export type Database = {
           notes?: string | null
           payment_method?: Database["public"]["Enums"]["payment_method"]
           services_performed?: Json | null
+          staff_hours?: Json | null
           staff_ids?: string[] | null
           subtotal?: number | null
           taxes?: number | null
@@ -135,6 +137,7 @@ export type Database = {
           notes?: string | null
           payment_method?: Database["public"]["Enums"]["payment_method"]
           services_performed?: Json | null
+          staff_hours?: Json | null
           staff_ids?: string[] | null
           subtotal?: number | null
           taxes?: number | null

@@ -59,6 +59,7 @@ interface CompletedService {
   items_purchased: any;
   staff_ids: string[];
   hours_worked: number;
+  staff_hours: { [key: string]: number };
   subtotal: number;
   taxes: number;
   total_cost: number;
@@ -100,7 +101,7 @@ export default function AdminDashboard() {
     servicesPerformed: [] as Array<{ service: string; cost: string }>,
     itemsPurchased: [] as Array<{ name: string; cost: string }>,
     selectedStaff: [] as string[],
-    hoursWorked: "",
+    staffHours: {} as { [key: string]: string },
     taxRate: "14",
     discount: "",
     notes: "",
@@ -316,6 +317,15 @@ export default function AdminDashboard() {
       const discount = parseFloat(completionData.discount) || 0;
       const totalCost = servicesSubtotal + itemsSubtotal + taxes - discount;
 
+      // Convert staffHours to numbers and calculate total
+      const staffHoursData: { [key: string]: number } = {};
+      let totalHours = 0;
+      Object.entries(completionData.staffHours).forEach(([staffId, hours]) => {
+        const numHours = parseFloat(hours as string) || 0;
+        staffHoursData[staffId] = numHours;
+        totalHours += numHours;
+      });
+
       // Save to completed_services table with ALL appointment data copied
       const { error: completedError } = await supabase
         .from('completed_services')
@@ -333,7 +343,8 @@ export default function AdminDashboard() {
           services_performed: servicesPerformed as any,
           items_purchased: itemsPurchased as any,
           staff_ids: completionData.selectedStaff,
-          hours_worked: parseFloat(completionData.hoursWorked) || 0,
+          hours_worked: totalHours,
+          staff_hours: staffHoursData as any,
           subtotal: servicesSubtotal + itemsSubtotal,
           taxes,
           total_cost: totalCost,
@@ -391,7 +402,7 @@ export default function AdminDashboard() {
         servicesPerformed: [],
         itemsPurchased: [],
         selectedStaff: [],
-        hoursWorked: "",
+        staffHours: {},
         taxRate: "14",
         discount: "",
         notes: "",
@@ -998,7 +1009,7 @@ export default function AdminDashboard() {
                   servicesPerformed: [],
                   itemsPurchased: [],
                   selectedStaff: [],
-                  hoursWorked: "",
+                  staffHours: {},
                   taxRate: "14",
                   discount: "",
                   notes: "",
@@ -1129,8 +1140,8 @@ export default function AdminDashboard() {
                   </div>
 
                   <div>
-                    <Label>Staff Members</Label>
-                    <div className="space-y-2 border rounded-md p-3 max-h-40 overflow-y-auto">
+                    <Label>Staff Members & Hours</Label>
+                    <div className="space-y-2 border rounded-md p-3 max-h-60 overflow-y-auto">
                       {staff.filter(s => s.is_active).map((s) => (
                         <div key={s.id} className="flex items-center space-x-2">
                           <Checkbox
@@ -1140,32 +1151,44 @@ export default function AdminDashboard() {
                               if (checked) {
                                 setCompletionData({
                                   ...completionData,
-                                  selectedStaff: [...completionData.selectedStaff, s.id]
+                                  selectedStaff: [...completionData.selectedStaff, s.id],
+                                  staffHours: { ...completionData.staffHours, [s.id]: "" }
                                 });
                               } else {
+                                const newStaffHours = { ...completionData.staffHours };
+                                delete newStaffHours[s.id];
                                 setCompletionData({
                                   ...completionData,
-                                  selectedStaff: completionData.selectedStaff.filter(id => id !== s.id)
+                                  selectedStaff: completionData.selectedStaff.filter(id => id !== s.id),
+                                  staffHours: newStaffHours
                                 });
                               }
                             }}
                           />
-                          <Label htmlFor={`staff-${s.id}`} className="cursor-pointer">
+                          <Label htmlFor={`staff-${s.id}`} className="cursor-pointer flex-1">
                             {s.name}
                           </Label>
+                          {completionData.selectedStaff.includes(s.id) && (
+                            <Input
+                              type="number"
+                              step="0.5"
+                              placeholder="Hours"
+                              className="w-24"
+                              value={completionData.staffHours[s.id] || ""}
+                              onChange={(e) => {
+                                setCompletionData({
+                                  ...completionData,
+                                  staffHours: {
+                                    ...completionData.staffHours,
+                                    [s.id]: e.target.value
+                                  }
+                                });
+                              }}
+                            />
+                          )}
                         </div>
                       ))}
                     </div>
-                  </div>
-
-                  <div>
-                    <Label>Hours Worked</Label>
-                    <Input
-                      type="number"
-                      value={completionData.hoursWorked}
-                      onChange={(e) => setCompletionData({ ...completionData, hoursWorked: e.target.value })}
-                      placeholder="0"
-                    />
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
@@ -1282,7 +1305,7 @@ export default function AdminDashboard() {
                           servicesPerformed: [],
                           itemsPurchased: [],
                           selectedStaff: [],
-                          hoursWorked: "",
+                          staffHours: {},
                           taxRate: "14",
                           discount: "",
                           notes: "",
@@ -1400,10 +1423,25 @@ export default function AdminDashboard() {
   };
 
   const exportToCSV = () => {
+    // Get unique staff members from all completed services
+    const allStaffIds = new Set<string>();
+    completedServices.forEach(cs => {
+      (cs.staff_ids || []).forEach(id => allStaffIds.add(id));
+    });
+    
+    // Create headers with individual staff columns
+    const staffColumns: string[] = [];
+    allStaffIds.forEach(staffId => {
+      const staffMember = staff.find(s => s.id === staffId);
+      if (staffMember) {
+        staffColumns.push(`${staffMember.name} Hours`);
+      }
+    });
+    
     const headers = [
       "Date", "Confirmation #", "Customer", "Car Make", "Car Model", "Car Year",
       "Services", "Service Costs", "Items", "Item Costs", 
-      "Staff", "Hours", "Subtotal", "Taxes", "Total", "Payment Method", "Notes"
+      ...staffColumns, "Total Hours", "Subtotal", "Taxes", "Total", "Payment Method", "Notes"
     ];
     
     const rows = completedServices.map(cs => {
@@ -1417,7 +1455,12 @@ export default function AdminDashboard() {
         ? cs.items_purchased.map((i: any) => `$${i.cost}`).join('; ')
         : '';
       
-      const staffNames = getStaffNames(cs.staff_ids || []);
+      // Create staff hours columns
+      const staffHoursColumns: string[] = [];
+      allStaffIds.forEach(staffId => {
+        const hours = cs.staff_hours?.[staffId] || 0;
+        staffHoursColumns.push(hours.toString());
+      });
       
       return [
         cs.appointment_date ? new Date(cs.appointment_date).toLocaleDateString() : (cs.created_at ? new Date(cs.created_at).toLocaleDateString() : ''),
@@ -1430,7 +1473,7 @@ export default function AdminDashboard() {
         serviceCosts,
         items,
         itemCosts,
-        staffNames,
+        ...staffHoursColumns,
         cs.hours_worked?.toString() || '0',
         `$${cs.subtotal?.toFixed(2) || '0.00'}`,
         `$${cs.taxes?.toFixed(2) || '0.00'}`,
