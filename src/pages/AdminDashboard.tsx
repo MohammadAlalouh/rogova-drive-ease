@@ -1422,6 +1422,76 @@ export default function AdminDashboard() {
     });
   };
 
+  const exportStaffHours = (staffId: string) => {
+    const selectedStaff = staff.find(s => s.id === staffId);
+    if (!selectedStaff) return;
+
+    // Filter completed services for this staff member
+    const staffServices = completedServices.filter(cs => 
+      cs.staff_ids && cs.staff_ids.includes(staffId)
+    );
+
+    if (staffServices.length === 0) {
+      toast({
+        title: "No data",
+        description: `No completed services found for ${selectedStaff.name}`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const headers = ["Date", "Confirmation #", "Customer", "Car Make", "Car Model", "Car Year", "Services", "Service Costs", "Items", "Item Costs", "Hours Worked", "Notes"];
+    
+    const rows = staffServices.map(cs => {
+      const servicesStr = cs.services_performed.map((s: any) => s.service).join("; ");
+      const serviceCostsStr = cs.services_performed.map((s: any) => `$${s.cost.toFixed(2)}`).join("; ");
+      const itemsStr = Array.isArray(cs.items_purchased) 
+        ? cs.items_purchased.map((i: any) => i.name).join("; ")
+        : "";
+      const itemCostsStr = Array.isArray(cs.items_purchased)
+        ? cs.items_purchased.map((i: any) => `$${i.cost.toFixed(2)}`).join("; ")
+        : "";
+      
+      // Get hours for this specific staff member
+      const staffHours = cs.staff_hours?.[staffId] || 0;
+      
+      return [
+        cs.appointment_date ? new Date(cs.appointment_date).toLocaleDateString() : new Date(cs.created_at).toLocaleDateString(),
+        cs.confirmation_number || "N/A",
+        cs.customer_name || "N/A",
+        cs.car_make || "N/A",
+        cs.car_model || "N/A",
+        cs.car_year || "N/A",
+        servicesStr || "N/A",
+        serviceCostsStr || "N/A",
+        itemsStr || "N/A",
+        itemCostsStr || "N/A",
+        staffHours.toString(),
+        cs.notes || ""
+      ];
+    });
+
+    const csvContent = [
+      headers.join(","),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(","))
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${selectedStaff.name.replace(/\s+/g, '_')}_hours_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+
+    toast({
+      title: "Export successful",
+      description: `Staff hours for ${selectedStaff.name} downloaded`,
+    });
+  };
+
   const exportToCSV = () => {
     // Get unique staff members from all completed services
     const allStaffIds = new Set<string>();
@@ -1846,11 +1916,42 @@ export default function AdminDashboard() {
                   </Button>
                 </div>
               </div>
-              <Button onClick={exportToCSV} disabled={completedServices.length === 0} size="sm">
-                <Download className="mr-2 h-4 w-4" />
-                <span className="hidden sm:inline">Export to CSV</span>
-                <span className="sm:hidden">Export</span>
-              </Button>
+              <div className="flex gap-2">
+                <Dialog>
+                  <DialogTrigger asChild>
+                    <Button size="sm" variant="outline" disabled={completedServices.length === 0}>
+                      <Download className="mr-0 sm:mr-2 h-4 w-4" />
+                      <span className="hidden sm:inline">Export Staff Hours</span>
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Export Staff Hours</DialogTitle>
+                      <DialogDescription>Select a staff member to export their hours</DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="space-y-2">
+                        <Label>Select Staff</Label>
+                        <Select onValueChange={(value) => exportStaffHours(value)}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Choose staff member" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {staff.filter(s => s.is_active).map((s) => (
+                              <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+                <Button onClick={exportToCSV} disabled={completedServices.length === 0} size="sm">
+                  <Download className="mr-0 sm:mr-2 h-4 w-4" />
+                  <span className="hidden sm:inline">Export All</span>
+                  <span className="sm:hidden">Export</span>
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="px-2 md:px-6">
               {loading ? (
@@ -1880,6 +1981,7 @@ export default function AdminDashboard() {
                                   <TableHead className="min-w-[80px]">Hours</TableHead>
                                   <TableHead className="min-w-[100px]">Payment</TableHead>
                                   <TableHead className="min-w-[100px]">Total</TableHead>
+                                  <TableHead className="min-w-[150px]">Notes</TableHead>
                                 </TableRow>
                               </TableHeader>
                               <TableBody>
@@ -1916,6 +2018,7 @@ export default function AdminDashboard() {
                                       <TableCell className="font-semibold">
                                         ${cs.total_cost.toFixed(2)}
                                       </TableCell>
+                                      <TableCell className="text-sm">{cs.notes || '-'}</TableCell>
                                     </TableRow>
                                   );
                                 })}
