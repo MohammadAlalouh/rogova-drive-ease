@@ -58,6 +58,7 @@ interface CompletedService {
   services_performed: any;
   items_purchased: any;
   staff_ids: string[];
+  staff_names: string[];
   hours_worked: number;
   staff_hours: { [key: string]: number };
   subtotal: number;
@@ -329,6 +330,12 @@ export default function AdminDashboard() {
         totalHours += numHours;
       });
 
+      // Get staff names to save as snapshot
+      const staffNames = completionData.selectedStaff.map(staffId => {
+        const staffMember = staff.find(s => s.id === staffId);
+        return staffMember ? staffMember.name : 'Unknown';
+      });
+
       // Save to completed_services table with ALL appointment data copied
       const { error: completedError } = await supabase
         .from('completed_services')
@@ -346,6 +353,7 @@ export default function AdminDashboard() {
           services_performed: servicesPerformed as any,
           items_purchased: itemsPurchased as any,
           staff_ids: completionData.selectedStaff,
+          staff_names: staffNames,
           hours_worked: totalHours,
           staff_hours: staffHoursData as any,
           subtotal: servicesSubtotal + itemsSubtotal,
@@ -824,7 +832,12 @@ export default function AdminDashboard() {
     }
   };
 
-  const getStaffNames = (staffIds: string[]) => {
+  const getStaffNames = (staffIds: string[], staffNames?: string[]) => {
+    // Use stored staff_names if available (for completed services)
+    if (staffNames && staffNames.length > 0) {
+      return staffNames.join(', ');
+    }
+    // Fallback to looking up current staff (for active appointments)
     return staff
       .filter(s => staffIds.includes(s.id))
       .map(s => s.name)
@@ -1368,7 +1381,7 @@ export default function AdminDashboard() {
   const groupCompletedServicesByStaff = (): GroupedCompletedServices => {
     const grouped: GroupedCompletedServices = {};
     completedServices.forEach(cs => {
-      const staffNames = getStaffNames(cs.staff_ids) || 'Unassigned';
+      const staffNames = getStaffNames(cs.staff_ids, cs.staff_names) || 'Unassigned';
       if (!grouped[staffNames]) {
         grouped[staffNames] = [];
       }
@@ -1503,18 +1516,21 @@ export default function AdminDashboard() {
 
   const exportToCSV = () => {
     // Get unique staff members from all completed services
-    const allStaffIds = new Set<string>();
+    const allStaffMap = new Map<string, string>();
     completedServices.forEach(cs => {
-      (cs.staff_ids || []).forEach(id => allStaffIds.add(id));
+      (cs.staff_ids || []).forEach((id, index) => {
+        if (!allStaffMap.has(id)) {
+          // Use stored staff_names if available, fallback to current staff
+          const name = cs.staff_names?.[index] || staff.find(s => s.id === id)?.name || 'Unknown Staff';
+          allStaffMap.set(id, name);
+        }
+      });
     });
     
     // Create headers with individual staff columns
     const staffColumns: string[] = [];
-    allStaffIds.forEach(staffId => {
-      const staffMember = staff.find(s => s.id === staffId);
-      if (staffMember) {
-        staffColumns.push(`${staffMember.name} Hours`);
-      }
+    allStaffMap.forEach((name) => {
+      staffColumns.push(`${name} Hours`);
     });
     
     const headers = [
@@ -1536,7 +1552,7 @@ export default function AdminDashboard() {
       
       // Create staff hours columns
       const staffHoursColumns: string[] = [];
-      allStaffIds.forEach(staffId => {
+      allStaffMap.forEach((name, staffId) => {
         const hours = cs.staff_hours?.[staffId] || 0;
         staffHoursColumns.push(hours.toString());
       });
@@ -2023,7 +2039,7 @@ export default function AdminDashboard() {
                                           </div>
                                         ))}
                                       </TableCell>
-                                      <TableCell>{getStaffNames(cs.staff_ids)}</TableCell>
+                                      <TableCell>{getStaffNames(cs.staff_ids, cs.staff_names)}</TableCell>
                                       <TableCell>{cs.hours_worked}</TableCell>
                                       <TableCell>${cs.discount?.toFixed(2) || '0.00'}</TableCell>
                                       <TableCell className="capitalize">{cs.payment_method}</TableCell>

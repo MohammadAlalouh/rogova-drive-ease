@@ -90,6 +90,7 @@ export type Database = {
           services_performed: Json | null
           staff_hours: Json | null
           staff_ids: string[] | null
+          staff_names: string[] | null
           subtotal: number | null
           taxes: number | null
           total_cost: number | null
@@ -116,6 +117,7 @@ export type Database = {
           services_performed?: Json | null
           staff_hours?: Json | null
           staff_ids?: string[] | null
+          staff_names?: string[] | null
           subtotal?: number | null
           taxes?: number | null
           total_cost?: number | null
@@ -142,6 +144,7 @@ export type Database = {
           services_performed?: Json | null
           staff_hours?: Json | null
           staff_ids?: string[] | null
+          staff_names?: string[] | null
           subtotal?: number | null
           taxes?: number | null
           total_cost?: number | null
