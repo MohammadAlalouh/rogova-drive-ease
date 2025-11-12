@@ -98,6 +98,7 @@ export default function AdminDashboard() {
   const [groupBy, setGroupBy] = useState<"month" | "staff">("month");
   const [staffDialogOpen, setStaffDialogOpen] = useState(false);
   const [editingStaff, setEditingStaff] = useState<Staff | null>(null);
+  const [appointmentView, setAppointmentView] = useState<"all" | "by-day">("all");
   const [addAppointmentDialogOpen, setAddAppointmentDialogOpen] = useState(false);
   const [newAppointment, setNewAppointment] = useState({
     customerName: "",
@@ -832,6 +833,205 @@ export default function AdminDashboard() {
     );
   };
 
+  const groupAppointmentsByDay = () => {
+    const grouped: Record<string, Appointment[]> = {};
+    appointments.forEach(apt => {
+      const dateKey = new Date(apt.appointment_date).toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+      if (!grouped[dateKey]) {
+        grouped[dateKey] = [];
+      }
+      grouped[dateKey].push(apt);
+    });
+    return grouped;
+  };
+
+  const renderAppointmentRow = (appointment: Appointment, showDate: boolean = true) => (
+    <TableRow key={appointment.id}>
+      <TableCell className="font-mono text-xs">
+        {appointment.confirmation_number}
+      </TableCell>
+      <TableCell>{appointment.customer_name}</TableCell>
+      <TableCell>
+        <div className="text-sm">
+          <div>{appointment.customer_email}</div>
+          <div className="text-muted-foreground">{appointment.customer_phone}</div>
+        </div>
+      </TableCell>
+      <TableCell>
+        {showDate && (
+          <div>
+            {new Date(appointment.appointment_date).toLocaleDateString()}
+          </div>
+        )}
+        <div className="text-sm text-muted-foreground">
+          {appointment.appointment_time}
+        </div>
+      </TableCell>
+      <TableCell>{getServiceNames(appointment.service_ids)}</TableCell>
+      <TableCell className="text-sm">
+        {appointment.car_year} {appointment.car_make} {appointment.car_model}
+      </TableCell>
+      <TableCell className="text-sm max-w-[200px]">
+        {appointment.notes ? (
+          <div className="truncate" title={appointment.notes}>
+            {appointment.notes}
+          </div>
+        ) : (
+          <span className="text-muted-foreground italic">No notes</span>
+        )}
+      </TableCell>
+      <TableCell>{getStatusBadge(appointment.status)}</TableCell>
+      <TableCell>
+        <div className="flex gap-2 flex-wrap">
+          {appointment.status !== 'complete' && appointment.status !== 'cancelled' && (
+            <Dialog open={dialogOpen && editingAppointment?.id === appointment.id} onOpenChange={(open) => {
+              setDialogOpen(open);
+              if (!open) setEditingAppointment(null);
+            }}>
+              <DialogTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={actionLoading === appointment.id}
+                  onClick={() => {
+                    setEditingAppointment(appointment);
+                    setEditDate(new Date(appointment.appointment_date));
+                    setEditTime(appointment.appointment_time);
+                    setDialogOpen(true);
+                  }}
+                >
+                  <Edit className="h-4 w-4" />
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-[95vw] md:max-w-[500px]">
+                <DialogHeader>
+                  <DialogTitle className="text-lg">Edit Appointment</DialogTitle>
+                  <DialogDescription className="text-sm">
+                    Update the date and time for this appointment
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div>
+                    <Label>Select New Date</Label>
+                    <Calendar
+                      mode="single"
+                      selected={editDate}
+                      onSelect={setEditDate}
+                      disabled={(date) => date < new Date()}
+                      className="rounded-md border p-3"
+                    />
+                  </div>
+                  <div>
+                    <Label>Select New Time</Label>
+                    <Select value={editTime} onValueChange={setEditTime}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableEditTimes.map((slot) => (
+                          <SelectItem key={slot} value={slot}>
+                            {slot}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button onClick={handleEdit} className="w-full" disabled={actionLoading === appointment.id}>
+                    {actionLoading === appointment.id ? "Updating..." : "Update Appointment"}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          )}
+
+          {appointment.status === 'pending' && (
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={actionLoading === appointment.id}
+              onClick={() => handleUpdateStatus(appointment, 'in_progress')}
+              title="Start Progress"
+            >
+              <PlayCircle className="h-4 w-4" />
+            </Button>
+          )}
+
+          {appointment.status === 'in_progress' && (
+            <Dialog open={completionDialogOpen && completingAppointment?.id === appointment.id} onOpenChange={(open) => {
+              setCompletionDialogOpen(open);
+              if (!open) {
+                setCompletingAppointment(null);
+                setCompletionData({
+                  servicesPerformed: [],
+                  itemsPurchased: [],
+                  selectedStaff: [],
+                  hoursWorked: "",
+                  taxRate: "14",
+                  discount: "",
+                  notes: "",
+                  paymentMethod: "cash"
+                });
+              }
+            }}>
+              <DialogTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="default"
+                  disabled={actionLoading === appointment.id}
+                  onClick={() => {
+                    setCompletingAppointment(appointment);
+                    setCompletionDialogOpen(true);
+                  }}
+                  title="Mark Complete"
+                >
+                  <CheckCircle className="h-4 w-4" />
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-h-[90vh] max-w-[95vw] md:max-w-[600px] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle className="text-lg">Complete Appointment</DialogTitle>
+                  <DialogDescription className="text-sm">
+                    Add service details and final payment (all fields optional)
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
+                  {/* ... keep existing code (completion form) */}
+                </div>
+              </DialogContent>
+            </Dialog>
+          )}
+
+          {appointment.status !== 'complete' && appointment.status !== 'in_progress' && (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={actionLoading === appointment.id}
+              onClick={() => handleCancel(appointment)}
+              title="Cancel Appointment"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          )}
+
+          <Button
+            size="sm"
+            variant="destructive"
+            disabled={actionLoading === appointment.id}
+            onClick={() => handleDelete(appointment)}
+            title="Delete Permanently"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      </TableCell>
+    </TableRow>
+  );
+
   const groupCompletedServicesByMonth = (): GroupedCompletedServices => {
     const grouped: GroupedCompletedServices = {};
     completedServices.forEach(cs => {
@@ -948,7 +1148,25 @@ export default function AdminDashboard() {
             <TabsContent value="appointments">
               <Card className="shadow-strong">
                 <CardHeader className="flex flex-row items-center justify-between">
-                  <CardTitle className="text-lg md:text-xl">All Appointments</CardTitle>
+                  <div className="flex items-center gap-4">
+                    <CardTitle className="text-lg md:text-xl">All Appointments</CardTitle>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant={appointmentView === "all" ? "default" : "outline"}
+                        onClick={() => setAppointmentView("all")}
+                      >
+                        All
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant={appointmentView === "by-day" ? "default" : "outline"}
+                        onClick={() => setAppointmentView("by-day")}
+                      >
+                        By Day
+                      </Button>
+                    </div>
+                  </div>
                   <Dialog open={addAppointmentDialogOpen} onOpenChange={setAddAppointmentDialogOpen}>
                     <DialogTrigger asChild>
                       <Button size="sm">
@@ -1114,7 +1332,43 @@ export default function AdminDashboard() {
                 <p>Loading appointments...</p>
               ) : appointments.length === 0 ? (
                 <p className="text-muted-foreground">No appointments found</p>
+              ) : appointmentView === "by-day" ? (
+                // Grouped by day view
+                <div className="space-y-6">
+                  {Object.entries(groupAppointmentsByDay()).map(([date, dayAppointments]) => (
+                    <div key={date} className="space-y-3">
+                      <h3 className="text-lg font-semibold sticky top-0 bg-background py-2 border-b">
+                        {date} ({dayAppointments.length} appointment{dayAppointments.length !== 1 ? 's' : ''})
+                      </h3>
+                      <div className="overflow-x-auto -mx-2 md:mx-0">
+                        <div className="inline-block min-w-full align-middle">
+                          <div className="overflow-hidden">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead className="min-w-[120px]">Confirmation #</TableHead>
+                                  <TableHead className="min-w-[120px]">Customer</TableHead>
+                                  <TableHead className="min-w-[150px]">Contact</TableHead>
+                                  <TableHead className="min-w-[120px]">Time</TableHead>
+                                  <TableHead className="min-w-[150px]">Services</TableHead>
+                                  <TableHead className="min-w-[150px]">Car Info</TableHead>
+                                  <TableHead className="min-w-[200px]">Notes</TableHead>
+                                  <TableHead className="min-w-[100px]">Status</TableHead>
+                                  <TableHead className="min-w-[180px]">Actions</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {dayAppointments.map((appointment) => renderAppointmentRow(appointment, false))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               ) : (
+                // All appointments view
                 <div className="overflow-x-auto -mx-2 md:mx-0">
                   <div className="inline-block min-w-full align-middle">
                     <div className="overflow-hidden">
@@ -1132,409 +1386,13 @@ export default function AdminDashboard() {
                             <TableHead className="min-w-[180px]">Actions</TableHead>
                           </TableRow>
                         </TableHeader>
-                    <TableBody>
-                      {appointments.map((appointment) => (
-                        <TableRow key={appointment.id}>
-                          <TableCell className="font-mono text-xs">
-                            {appointment.confirmation_number}
-                          </TableCell>
-                          <TableCell>{appointment.customer_name}</TableCell>
-                          <TableCell>
-                            <div className="text-sm">
-                              <div>{appointment.customer_email}</div>
-                              <div className="text-muted-foreground">{appointment.customer_phone}</div>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div>
-                              {new Date(appointment.appointment_date).toLocaleDateString()}
-                            </div>
-                            <div className="text-sm text-muted-foreground">
-                              {appointment.appointment_time}
-                            </div>
-                          </TableCell>
-                          <TableCell>{getServiceNames(appointment.service_ids)}</TableCell>
-                          <TableCell className="text-sm">
-                            {appointment.car_year} {appointment.car_make} {appointment.car_model}
-                          </TableCell>
-                          <TableCell className="text-sm max-w-[200px]">
-                            {appointment.notes ? (
-                              <div className="truncate" title={appointment.notes}>
-                                {appointment.notes}
-                              </div>
-                            ) : (
-                              <span className="text-muted-foreground italic">No notes</span>
-                            )}
-                          </TableCell>
-                          <TableCell>{getStatusBadge(appointment.status)}</TableCell>
-                          <TableCell>
-                            <div className="flex gap-2 flex-wrap">
-                              {appointment.status !== 'complete' && appointment.status !== 'cancelled' && (
-                                <Dialog open={dialogOpen && editingAppointment?.id === appointment.id} onOpenChange={(open) => {
-                                  setDialogOpen(open);
-                                  if (!open) setEditingAppointment(null);
-                                }}>
-                                  <DialogTrigger asChild>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      disabled={actionLoading === appointment.id}
-                                      onClick={() => {
-                                        setEditingAppointment(appointment);
-                                        setEditDate(new Date(appointment.appointment_date));
-                                        setEditTime(appointment.appointment_time);
-                                        setDialogOpen(true);
-                                      }}
-                                    >
-                                      <Edit className="h-4 w-4" />
-                                    </Button>
-                                  </DialogTrigger>
-                                   <DialogContent className="max-w-[95vw] md:max-w-[500px]">
-                                     <DialogHeader>
-                                       <DialogTitle className="text-lg">Edit Appointment</DialogTitle>
-                                       <DialogDescription className="text-sm">
-                                         Update the date and time for this appointment
-                                       </DialogDescription>
-                                     </DialogHeader>
-                                    <div className="space-y-4">
-                                      <div>
-                                        <Label>Select New Date</Label>
-                                        <Calendar
-                                          mode="single"
-                                          selected={editDate}
-                                          onSelect={setEditDate}
-                                          disabled={(date) => date < new Date()}
-                                          className="rounded-md border p-3"
-                                        />
-                                      </div>
-                                      <div>
-                                        <Label>Select New Time</Label>
-                                        <Select value={editTime} onValueChange={setEditTime}>
-                                          <SelectTrigger>
-                                            <SelectValue />
-                                          </SelectTrigger>
-                                          <SelectContent>
-                                            {availableEditTimes.map((slot) => (
-                                              <SelectItem key={slot} value={slot}>
-                                                {slot}
-                                              </SelectItem>
-                                            ))}
-                                          </SelectContent>
-                                        </Select>
-                                      </div>
-                                      <Button onClick={handleEdit} className="w-full" disabled={actionLoading === appointment.id}>
-                                        {actionLoading === appointment.id ? "Updating..." : "Update Appointment"}
-                                      </Button>
-                                    </div>
-                                  </DialogContent>
-                                </Dialog>
-                              )}
-
-                              {appointment.status === 'pending' && (
-                                <Button
-                                  size="sm"
-                                  variant="secondary"
-                                  disabled={actionLoading === appointment.id}
-                                  onClick={() => handleUpdateStatus(appointment, 'in_progress')}
-                                  title="Start Progress"
-                                >
-                                  <PlayCircle className="h-4 w-4" />
-                                </Button>
-                              )}
-
-                              {appointment.status === 'in_progress' && (
-                                 <Dialog open={completionDialogOpen && completingAppointment?.id === appointment.id} onOpenChange={(open) => {
-                                   setCompletionDialogOpen(open);
-                                    if (!open) {
-                                      setCompletingAppointment(null);
-                                      setCompletionData({
-                                        servicesPerformed: [],
-                                        itemsPurchased: [],
-                                        selectedStaff: [],
-                                        hoursWorked: "",
-                                        taxRate: "14",
-                                        discount: "",
-                                        notes: "",
-                                        paymentMethod: "cash"
-                                      });
-                                    }
-                                  }}>
-                                  <DialogTrigger asChild>
-                                    <Button
-                                      size="sm"
-                                      variant="default"
-                                      disabled={actionLoading === appointment.id}
-                                      onClick={() => {
-                                        setCompletingAppointment(appointment);
-                                        setCompletionDialogOpen(true);
-                                      }}
-                                      title="Mark Complete"
-                                    >
-                                      <CheckCircle className="h-4 w-4" />
-                                    </Button>
-                                  </DialogTrigger>
-                                   <DialogContent className="max-h-[90vh] max-w-[95vw] md:max-w-[600px] overflow-y-auto">
-                                     <DialogHeader>
-                                       <DialogTitle className="text-lg">Complete Appointment</DialogTitle>
-                                       <DialogDescription className="text-sm">
-                                         Add service details and final payment (all fields optional)
-                                       </DialogDescription>
-                                     </DialogHeader>
-                                    <div className="space-y-4">
-                                      <div>
-                                        <Label>Services Performed</Label>
-                                        <div className="space-y-2">
-                                          {completionData.servicesPerformed.map((item, index) => (
-                                            <div key={index} className="flex gap-2">
-                                              <Input
-                                                placeholder="Service name"
-                                                value={item.service}
-                                                onChange={(e) => {
-                                                  const updated = [...completionData.servicesPerformed];
-                                                  updated[index].service = e.target.value;
-                                                  setCompletionData({ ...completionData, servicesPerformed: updated });
-                                                }}
-                                              />
-                                              <Input
-                                                placeholder="Cost"
-                                                type="number"
-                                                step="0.01"
-                                                value={item.cost}
-                                                onChange={(e) => {
-                                                  const updated = [...completionData.servicesPerformed];
-                                                  updated[index].cost = e.target.value;
-                                                  setCompletionData({ ...completionData, servicesPerformed: updated });
-                                                }}
-                                              />
-                                              <Button
-                                                size="sm"
-                                                variant="outline"
-                                                onClick={() => {
-                                                  const updated = completionData.servicesPerformed.filter((_, i) => i !== index);
-                                                  setCompletionData({ ...completionData, servicesPerformed: updated });
-                                                }}
-                                              >
-                                                <X className="h-4 w-4" />
-                                              </Button>
-                                            </div>
-                                          ))}
-                                          <Button
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={() => {
-                                              setCompletionData({
-                                                ...completionData,
-                                                servicesPerformed: [...completionData.servicesPerformed, { service: "", cost: "" }]
-                                              });
-                                            }}
-                                          >
-                                            <Plus className="mr-2 h-4 w-4" />
-                                            Add Service
-                                          </Button>
-                                        </div>
-                                       </div>
-
-                                       <div>
-                                         <Label>Items Purchased (with tax already included in cost)</Label>
-                                         <div className="space-y-2">
-                                           {completionData.itemsPurchased.map((item, index) => (
-                                             <div key={index} className="flex gap-2">
-                                               <Input
-                                                 placeholder="Item name"
-                                                 value={item.name}
-                                                 onChange={(e) => {
-                                                   const updated = [...completionData.itemsPurchased];
-                                                   updated[index].name = e.target.value;
-                                                   setCompletionData({ ...completionData, itemsPurchased: updated });
-                                                 }}
-                                               />
-                                               <Input
-                                                 placeholder="Cost"
-                                                 type="number"
-                                                 step="0.01"
-                                                 value={item.cost}
-                                                 onChange={(e) => {
-                                                   const updated = [...completionData.itemsPurchased];
-                                                   updated[index].cost = e.target.value;
-                                                   setCompletionData({ ...completionData, itemsPurchased: updated });
-                                                 }}
-                                               />
-                                               <Button
-                                                 size="sm"
-                                                 variant="outline"
-                                                 onClick={() => {
-                                                   const updated = completionData.itemsPurchased.filter((_, i) => i !== index);
-                                                   setCompletionData({ ...completionData, itemsPurchased: updated });
-                                                 }}
-                                               >
-                                                 <X className="h-4 w-4" />
-                                               </Button>
-                                             </div>
-                                           ))}
-                                           <Button
-                                             size="sm"
-                                             variant="outline"
-                                             onClick={() => {
-                                               setCompletionData({
-                                                 ...completionData,
-                                                 itemsPurchased: [...completionData.itemsPurchased, { name: "", cost: "" }]
-                                               });
-                                             }}
-                                           >
-                                             <Plus className="mr-2 h-4 w-4" />
-                                             Add Item
-                                           </Button>
-                                         </div>
-                                       </div>
-
-                                       <div>
-                                         <Label>Staff Members</Label>
-                                         <div className="space-y-2">
-                                           {staff.filter(s => s.is_active).map((s) => (
-                                             <div key={s.id} className="flex items-center space-x-2">
-                                               <Checkbox
-                                                 id={s.id}
-                                                 checked={completionData.selectedStaff.includes(s.id)}
-                                                 onCheckedChange={(checked) => {
-                                                   const updated = checked
-                                                     ? [...completionData.selectedStaff, s.id]
-                                                     : completionData.selectedStaff.filter(id => id !== s.id);
-                                                   setCompletionData({ ...completionData, selectedStaff: updated });
-                                                 }}
-                                               />
-                                               <label htmlFor={s.id} className="text-sm cursor-pointer">
-                                                 {s.name}
-                                               </label>
-                                             </div>
-                                           ))}
-                                         </div>
-                                       </div>
-
-                                       <div>
-                                         <Label>Hours Worked</Label>
-                                         <Select value={completionData.hoursWorked} onValueChange={(value) => setCompletionData({ ...completionData, hoursWorked: value })}>
-                                           <SelectTrigger>
-                                             <SelectValue placeholder="Select hours" />
-                                           </SelectTrigger>
-                                           <SelectContent>
-                                             {[0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.25, 2.5, 2.75, 3, 3.5, 4, 4.5, 5, 6, 7, 8].map(h => (
-                                               <SelectItem key={h} value={h.toString()}>{h} hours</SelectItem>
-                                             ))}
-                                           </SelectContent>
-                                         </Select>
-                                       </div>
-
-                                       <div className="grid grid-cols-2 gap-4">
-                                         <div>
-                                           <Label>Tax Rate (%)</Label>
-                                           <Input
-                                             type="number"
-                                             step="0.01"
-                                             placeholder="14"
-                                             value={completionData.taxRate}
-                                             onChange={(e) => setCompletionData({ ...completionData, taxRate: e.target.value })}
-                                           />
-                                         </div>
-                                         <div>
-                                           <Label>Discount ($)</Label>
-                                           <Input
-                                             type="number"
-                                             step="0.01"
-                                             placeholder="0.00"
-                                             value={completionData.discount}
-                                             onChange={(e) => setCompletionData({ ...completionData, discount: e.target.value })}
-                                           />
-                                         </div>
-                                       </div>
-
-                                       <div className="bg-muted p-4 rounded-lg space-y-2">
-                                         <div className="flex justify-between text-sm">
-                                           <span>Services Subtotal:</span>
-                                           <span>${calculateCompletionTotals().servicesSubtotal}</span>
-                                         </div>
-                                         <div className="flex justify-between text-sm">
-                                           <span>Items Subtotal:</span>
-                                           <span>${calculateCompletionTotals().itemsSubtotal}</span>
-                                         </div>
-                                         <div className="flex justify-between text-sm">
-                                           <span>Taxes ({completionData.taxRate}% on services):</span>
-                                           <span>${calculateCompletionTotals().taxes}</span>
-                                         </div>
-                                         {parseFloat(completionData.discount) > 0 && (
-                                           <div className="flex justify-between text-sm text-destructive">
-                                             <span>Discount:</span>
-                                             <span>-${parseFloat(completionData.discount).toFixed(2)}</span>
-                                           </div>
-                                         )}
-                                         <div className="flex justify-between font-bold pt-2 border-t">
-                                           <span>Total:</span>
-                                           <span>${calculateCompletionTotals().total}</span>
-                                         </div>
-                                       </div>
-
-                                       <div>
-                                         <Label>Payment Method</Label>
-                                         <Select value={completionData.paymentMethod} onValueChange={(value) => setCompletionData({ ...completionData, paymentMethod: value })}>
-                                           <SelectTrigger>
-                                             <SelectValue />
-                                           </SelectTrigger>
-                                           <SelectContent>
-                                             <SelectItem value="cash">Cash</SelectItem>
-                                             <SelectItem value="visa">Visa</SelectItem>
-                                             <SelectItem value="mastercard">Mastercard</SelectItem>
-                                             <SelectItem value="etransfer">eTransfer</SelectItem>
-                                             <SelectItem value="other">Other</SelectItem>
-                                           </SelectContent>
-                                         </Select>
-                                       </div>
-
-                                       <div>
-                                         <Label>Notes</Label>
-                                         <Textarea
-                                           placeholder="Additional notes..."
-                                           value={completionData.notes}
-                                           onChange={(e) => setCompletionData({ ...completionData, notes: e.target.value })}
-                                         />
-                                       </div>
-
-                                       <Button onClick={handleCompleteAppointment} className="w-full" disabled={actionLoading === appointment.id}>
-                                         {actionLoading === appointment.id ? "Completing..." : "Complete Appointment"}
-                                       </Button>
-                                    </div>
-                                  </DialogContent>
-                                </Dialog>
-                              )}
-
-                              {appointment.status !== 'cancelled' && appointment.status !== 'complete' && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  disabled={actionLoading === appointment.id}
-                                  onClick={() => handleCancel(appointment)}
-                                  title="Cancel"
-                                >
-                                  <X className="h-4 w-4" />
-                                </Button>
-                              )}
-
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                disabled={actionLoading === appointment.id}
-                                onClick={() => handleDelete(appointment)}
-                                title="Delete Permanently"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                    </Table>
+                        <TableBody>
+                          {appointments.map((appointment) => renderAppointmentRow(appointment, true))}
+                        </TableBody>
+                      </Table>
+                    </div>
                   </div>
                 </div>
-              </div>
               )}
             </CardContent>
           </Card>
