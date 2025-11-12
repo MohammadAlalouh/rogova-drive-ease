@@ -6,7 +6,7 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-interface AppointmentEmailRequest {
+  interface AppointmentEmailRequest {
   to: string;
   customerName: string;
   confirmationNumber: string;
@@ -17,9 +17,12 @@ interface AppointmentEmailRequest {
   notes?: string;
   invoice?: {
     servicesPerformed: Array<{ service: string; cost: number }>;
-    itemsPurchased?: string;
-    subtotal: number;
+    itemsPurchased?: Array<{ name: string; cost: number }>;
+    servicesSubtotal: number;
+    itemsSubtotal: number;
     taxes: number;
+    taxRate: number;
+    discount: number;
     totalCost: number;
   };
 }
@@ -113,24 +116,50 @@ const handler = async (req: Request): Promise<Response> => {
             .map(s => `<tr><td style="padding: 8px; border-bottom: 1px solid #eee;">${s.service}</td><td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">$${s.cost.toFixed(2)}</td></tr>`)
             .join('');
           
+          const itemsHtml = (invoice.itemsPurchased && invoice.itemsPurchased.length > 0)
+            ? invoice.itemsPurchased
+                .map(i => `<tr><td style="padding: 8px; border-bottom: 1px solid #eee;">${i.name} (with tax)</td><td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">$${i.cost.toFixed(2)}</td></tr>`)
+                .join('')
+            : '';
+
+          const discountRow = invoice.discount > 0 ? `
+            <tr style="background-color: #fee;">
+              <td style="padding: 8px; border-bottom: 1px solid #eee; color: #dc2626;">Discount</td>
+              <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right; color: #dc2626;">-$${invoice.discount.toFixed(2)}</td>
+            </tr>
+          ` : '';
+          
           invoiceHtml = `
             <h2>Invoice Details</h2>
             <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
               <thead>
                 <tr style="background-color: #f5f5f5;">
-                  <th style="padding: 8px; text-align: left; border-bottom: 2px solid #ddd;">Service</th>
+                  <th style="padding: 8px; text-align: left; border-bottom: 2px solid #ddd;">Service/Item</th>
                   <th style="padding: 8px; text-align: right; border-bottom: 2px solid #ddd;">Cost</th>
                 </tr>
               </thead>
               <tbody>
                 ${servicesHtml}
+                ${itemsHtml}
+                <tr style="background-color: #f9f9f9; font-weight: bold;">
+                  <td style="padding: 8px; border-bottom: 1px solid #eee;">Services Subtotal</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">$${invoice.servicesSubtotal.toFixed(2)}</td>
+                </tr>
+                ${invoice.itemsSubtotal > 0 ? `
+                  <tr style="background-color: #f9f9f9; font-weight: bold;">
+                    <td style="padding: 8px; border-bottom: 1px solid #eee;">Items Subtotal</td>
+                    <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">$${invoice.itemsSubtotal.toFixed(2)}</td>
+                  </tr>
+                ` : ''}
+                <tr>
+                  <td style="padding: 8px; border-bottom: 1px solid #eee;">Taxes (${invoice.taxRate}% on services only)</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">$${invoice.taxes.toFixed(2)}</td>
+                </tr>
+                ${discountRow}
               </tbody>
             </table>
-            ${invoice.itemsPurchased ? `<p><strong>Items/Parts Purchased:</strong><br>${invoice.itemsPurchased}</p>` : ''}
-            <div style="margin-top: 20px; padding: 15px; background-color: #f9f9f9; border-radius: 5px;">
-              <p style="margin: 5px 0;"><strong>Subtotal:</strong> $${invoice.subtotal.toFixed(2)}</p>
-              <p style="margin: 5px 0;"><strong>Taxes:</strong> $${invoice.taxes.toFixed(2)}</p>
-              <p style="margin: 10px 0; font-size: 1.2em; font-weight: bold;"><strong>Total:</strong> $${invoice.totalCost.toFixed(2)}</p>
+            <div style="margin-top: 20px; padding: 15px; background-color: #e8f4f8; border-radius: 5px;">
+              <p style="margin: 10px 0; font-size: 1.2em; font-weight: bold;"><strong>Total Amount:</strong> $${invoice.totalCost.toFixed(2)}</p>
             </div>
           `;
         }

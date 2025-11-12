@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { LogOut, Edit, Trash2, CheckCircle, PlayCircle, X, Plus, Download } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface Appointment {
   id: string;
@@ -38,11 +39,21 @@ interface Service {
   is_active: boolean;
 }
 
+interface Staff {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  is_active: boolean;
+}
+
 interface CompletedService {
   id: string;
   appointment_id: string;
   services_performed: any;
-  items_purchased: string;
+  items_purchased: any;
+  staff_ids: string[];
+  hours_worked: number;
   subtotal: number;
   taxes: number;
   total_cost: number;
@@ -53,6 +64,7 @@ interface CompletedService {
 export default function AdminDashboard() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [services, setServices] = useState<Service[]>([]);
+  const [staff, setStaff] = useState<Staff[]>([]);
   const [completedServices, setCompletedServices] = useState<CompletedService[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
@@ -67,11 +79,19 @@ export default function AdminDashboard() {
   const [completingAppointment, setCompletingAppointment] = useState<Appointment | null>(null);
   const [completionData, setCompletionData] = useState({
     servicesPerformed: [] as Array<{ service: string; cost: string }>,
-    itemsPurchased: "",
-    subtotal: "",
-    taxes: "",
-    totalCost: "",
+    itemsPurchased: [] as Array<{ name: string; cost: string }>,
+    selectedStaff: [] as string[],
+    hoursWorked: "",
+    taxRate: "14",
+    discount: "",
     notes: ""
+  });
+  const [staffDialogOpen, setStaffDialogOpen] = useState(false);
+  const [editingStaff, setEditingStaff] = useState<Staff | null>(null);
+  const [newStaff, setNewStaff] = useState({
+    name: "",
+    email: "",
+    phone: ""
   });
   const [newService, setNewService] = useState({
     name: "",
@@ -140,7 +160,7 @@ export default function AdminDashboard() {
 
   const fetchData = async () => {
     try {
-      const [appointmentsRes, servicesRes, completedRes] = await Promise.all([
+      const [appointmentsRes, servicesRes, staffRes, completedRes] = await Promise.all([
         supabase
           .from('appointments')
           .select('*')
@@ -150,6 +170,10 @@ export default function AdminDashboard() {
           .from('services')
           .select('*'),
         supabase
+          .from('staff' as any)
+          .select('*')
+          .order('name'),
+        supabase
           .from('completed_services')
           .select('*')
           .order('created_at', { ascending: false })
@@ -157,11 +181,13 @@ export default function AdminDashboard() {
 
       if (appointmentsRes.error) throw appointmentsRes.error;
       if (servicesRes.error) throw servicesRes.error;
+      if (staffRes.error) throw staffRes.error;
       if (completedRes.error) throw completedRes.error;
 
       setAppointments(appointmentsRes.data || []);
       setServices(servicesRes.data || []);
-      setCompletedServices(completedRes.data || []);
+      setStaff(staffRes.data as any || []);
+      setCompletedServices(completedRes.data as any || []);
     } catch (error: any) {
       toast({
         title: "Error loading data",
@@ -236,23 +262,31 @@ export default function AdminDashboard() {
 
     try {
       // Calculate totals
-      const subtotal = parseFloat(completionData.subtotal) || 0;
-      const taxes = parseFloat(completionData.taxes) || 0;
-      const totalCost = parseFloat(completionData.totalCost) || subtotal + taxes;
-
-      // Convert services performed to proper format
       const servicesPerformed = completionData.servicesPerformed
         .filter(s => s.service && s.cost)
         .map(s => ({ service: s.service, cost: parseFloat(s.cost) || 0 }));
+      
+      const itemsPurchased = completionData.itemsPurchased
+        .filter(i => i.name && i.cost)
+        .map(i => ({ name: i.name, cost: parseFloat(i.cost) || 0 }));
+
+      const servicesSubtotal = servicesPerformed.reduce((sum, s) => sum + s.cost, 0);
+      const itemsSubtotal = itemsPurchased.reduce((sum, i) => sum + i.cost, 0);
+      const taxRate = parseFloat(completionData.taxRate) || 0;
+      const taxes = servicesSubtotal * (taxRate / 100);
+      const discount = parseFloat(completionData.discount) || 0;
+      const totalCost = servicesSubtotal + itemsSubtotal + taxes - discount;
 
       // Save to completed_services table
       const { error: completedError } = await supabase
         .from('completed_services')
         .insert({
           appointment_id: completingAppointment.id,
-          services_performed: servicesPerformed,
-          items_purchased: completionData.itemsPurchased || null,
-          subtotal,
+          services_performed: servicesPerformed as any,
+          items_purchased: itemsPurchased as any,
+          staff_ids: completionData.selectedStaff,
+          hours_worked: parseFloat(completionData.hoursWorked) || 0,
+          subtotal: servicesSubtotal + itemsSubtotal,
           taxes,
           total_cost: totalCost,
           notes: completionData.notes || null
@@ -283,9 +317,12 @@ export default function AdminDashboard() {
           notes: completingAppointment.notes,
           invoice: {
             servicesPerformed,
-            itemsPurchased: completionData.itemsPurchased,
-            subtotal,
+            itemsPurchased,
+            servicesSubtotal,
+            itemsSubtotal,
             taxes,
+            taxRate,
+            discount,
             totalCost
           }
         }
@@ -300,10 +337,11 @@ export default function AdminDashboard() {
       setCompletingAppointment(null);
       setCompletionData({
         servicesPerformed: [],
-        itemsPurchased: "",
-        subtotal: "",
-        taxes: "",
-        totalCost: "",
+        itemsPurchased: [],
+        selectedStaff: [],
+        hoursWorked: "",
+        taxRate: "14",
+        discount: "",
         notes: ""
       });
       fetchData();
@@ -518,6 +556,107 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleSaveStaff = async () => {
+    if (actionLoading) return;
+    setActionLoading("staff");
+
+    try {
+      if (editingStaff) {
+        const { error } = await supabase
+          .from('staff' as any)
+          .update({
+            name: newStaff.name,
+            email: newStaff.email || null,
+            phone: newStaff.phone || null
+          })
+          .eq('id', editingStaff.id);
+
+        if (error) throw error;
+        toast({ title: "Staff updated" });
+      } else {
+        const { error } = await supabase
+          .from('staff' as any)
+          .insert({
+            name: newStaff.name,
+            email: newStaff.email || null,
+            phone: newStaff.phone || null,
+            is_active: true
+          });
+
+        if (error) throw error;
+        toast({ title: "Staff added" });
+      }
+
+      setStaffDialogOpen(false);
+      setEditingStaff(null);
+      setNewStaff({ name: "", email: "", phone: "" });
+      fetchData();
+    } catch (error: any) {
+      toast({
+        title: "Error saving staff",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleDeleteStaff = async (staffId: string) => {
+    if (!confirm("Are you sure you want to deactivate this staff member?")) return;
+    if (actionLoading) return;
+    setActionLoading(staffId);
+
+    try {
+      const { error } = await supabase
+        .from('staff' as any)
+        .update({ is_active: false })
+        .eq('id', staffId);
+
+      if (error) throw error;
+
+      toast({ title: "Staff deactivated" });
+      fetchData();
+    } catch (error: any) {
+      toast({
+        title: "Error deactivating staff",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const getStaffNames = (staffIds: string[]) => {
+    return staff
+      .filter(s => staffIds.includes(s.id))
+      .map(s => s.name)
+      .join(', ');
+  };
+
+  const calculateCompletionTotals = () => {
+    const servicesSubtotal = completionData.servicesPerformed
+      .filter(s => s.service && s.cost)
+      .reduce((sum, s) => sum + (parseFloat(s.cost) || 0), 0);
+    
+    const itemsSubtotal = completionData.itemsPurchased
+      .filter(i => i.name && i.cost)
+      .reduce((sum, i) => sum + (parseFloat(i.cost) || 0), 0);
+
+    const taxRate = parseFloat(completionData.taxRate) || 0;
+    const taxes = servicesSubtotal * (taxRate / 100);
+    const discount = parseFloat(completionData.discount) || 0;
+    const total = servicesSubtotal + itemsSubtotal + taxes - discount;
+
+    return {
+      servicesSubtotal: servicesSubtotal.toFixed(2),
+      itemsSubtotal: itemsSubtotal.toFixed(2),
+      taxes: taxes.toFixed(2),
+      total: total.toFixed(2)
+    };
+  };
+
   const getStatusBadge = (status: string) => {
     const variants: Record<string, "default" | "secondary" | "destructive"> = {
       pending: "default",
@@ -534,18 +673,24 @@ export default function AdminDashboard() {
   };
 
   const exportToCSV = () => {
-    const headers = ["Date", "Confirmation #", "Customer", "Services", "Items Purchased", "Subtotal", "Taxes", "Total", "Notes"];
+    const headers = ["Date", "Confirmation #", "Customer", "Services", "Items", "Staff", "Hours", "Subtotal", "Taxes", "Total", "Notes"];
     
     const rows = completedServices.map(cs => {
       const appointment = appointments.find(a => a.id === cs.appointment_id);
       const servicesPerformed = cs.services_performed.map((s: any) => `${s.service}: $${s.cost}`).join('; ');
+      const itemsList = Array.isArray(cs.items_purchased) 
+        ? cs.items_purchased.map((i: any) => `${i.name}: $${i.cost}`).join('; ')
+        : cs.items_purchased || '';
+      const staffNames = getStaffNames(cs.staff_ids || []);
       
       return [
         cs.created_at ? new Date(cs.created_at).toLocaleDateString() : '',
         appointment?.confirmation_number || '',
         appointment?.customer_name || '',
         servicesPerformed,
-        cs.items_purchased || '',
+        itemsList,
+        staffNames,
+        cs.hours_worked?.toString() || '0',
         `$${cs.subtotal?.toFixed(2) || '0.00'}`,
         `$${cs.taxes?.toFixed(2) || '0.00'}`,
         `$${cs.total_cost?.toFixed(2) || '0.00'}`,
@@ -590,6 +735,7 @@ export default function AdminDashboard() {
             <TabsList>
               <TabsTrigger value="appointments">Appointments</TabsTrigger>
               <TabsTrigger value="services">Services</TabsTrigger>
+              <TabsTrigger value="staff">Staff</TabsTrigger>
               <TabsTrigger value="completed">Completed Services</TabsTrigger>
             </TabsList>
 
@@ -718,18 +864,19 @@ export default function AdminDashboard() {
                               {appointment.status === 'in_progress' && (
                                 <Dialog open={completionDialogOpen && completingAppointment?.id === appointment.id} onOpenChange={(open) => {
                                   setCompletionDialogOpen(open);
-                                  if (!open) {
-                                    setCompletingAppointment(null);
-                                    setCompletionData({
-                                      servicesPerformed: [],
-                                      itemsPurchased: "",
-                                      subtotal: "",
-                                      taxes: "",
-                                      totalCost: "",
-                                      notes: ""
-                                    });
-                                  }
-                                }}>
+                                   if (!open) {
+                                     setCompletingAppointment(null);
+                                     setCompletionData({
+                                       servicesPerformed: [],
+                                       itemsPurchased: [],
+                                       selectedStaff: [],
+                                       hoursWorked: "",
+                                       taxRate: "14",
+                                       discount: "",
+                                       notes: ""
+                                     });
+                                   }
+                                 }}>
                                   <DialogTrigger asChild>
                                     <Button
                                       size="sm"
@@ -803,49 +950,145 @@ export default function AdminDashboard() {
                                             Add Service
                                           </Button>
                                         </div>
-                                      </div>
+                                       </div>
 
-                                      <div>
-                                        <Label>Items Purchased</Label>
-                                        <Textarea
-                                          placeholder="List any parts or items..."
-                                          value={completionData.itemsPurchased}
-                                          onChange={(e) => setCompletionData({ ...completionData, itemsPurchased: e.target.value })}
-                                        />
-                                      </div>
+                                       <div>
+                                         <Label>Items Purchased (with tax already included in cost)</Label>
+                                         <div className="space-y-2">
+                                           {completionData.itemsPurchased.map((item, index) => (
+                                             <div key={index} className="flex gap-2">
+                                               <Input
+                                                 placeholder="Item name"
+                                                 value={item.name}
+                                                 onChange={(e) => {
+                                                   const updated = [...completionData.itemsPurchased];
+                                                   updated[index].name = e.target.value;
+                                                   setCompletionData({ ...completionData, itemsPurchased: updated });
+                                                 }}
+                                               />
+                                               <Input
+                                                 placeholder="Cost"
+                                                 type="number"
+                                                 step="0.01"
+                                                 value={item.cost}
+                                                 onChange={(e) => {
+                                                   const updated = [...completionData.itemsPurchased];
+                                                   updated[index].cost = e.target.value;
+                                                   setCompletionData({ ...completionData, itemsPurchased: updated });
+                                                 }}
+                                               />
+                                               <Button
+                                                 size="sm"
+                                                 variant="outline"
+                                                 onClick={() => {
+                                                   const updated = completionData.itemsPurchased.filter((_, i) => i !== index);
+                                                   setCompletionData({ ...completionData, itemsPurchased: updated });
+                                                 }}
+                                               >
+                                                 <X className="h-4 w-4" />
+                                               </Button>
+                                             </div>
+                                           ))}
+                                           <Button
+                                             size="sm"
+                                             variant="outline"
+                                             onClick={() => {
+                                               setCompletionData({
+                                                 ...completionData,
+                                                 itemsPurchased: [...completionData.itemsPurchased, { name: "", cost: "" }]
+                                               });
+                                             }}
+                                           >
+                                             <Plus className="mr-2 h-4 w-4" />
+                                             Add Item
+                                           </Button>
+                                         </div>
+                                       </div>
 
-                                      <div className="grid grid-cols-3 gap-4">
-                                        <div>
-                                          <Label>Subtotal</Label>
-                                          <Input
-                                            type="number"
-                                            step="0.01"
-                                            placeholder="0.00"
-                                            value={completionData.subtotal}
-                                            onChange={(e) => setCompletionData({ ...completionData, subtotal: e.target.value })}
-                                          />
-                                        </div>
-                                        <div>
-                                          <Label>Taxes</Label>
-                                          <Input
-                                            type="number"
-                                            step="0.01"
-                                            placeholder="0.00"
-                                            value={completionData.taxes}
-                                            onChange={(e) => setCompletionData({ ...completionData, taxes: e.target.value })}
-                                          />
-                                        </div>
-                                        <div>
-                                          <Label>Total</Label>
-                                          <Input
-                                            type="number"
-                                            step="0.01"
-                                            placeholder="0.00"
-                                            value={completionData.totalCost}
-                                            onChange={(e) => setCompletionData({ ...completionData, totalCost: e.target.value })}
-                                          />
-                                        </div>
-                                      </div>
+                                       <div>
+                                         <Label>Staff Members</Label>
+                                         <div className="space-y-2">
+                                           {staff.filter(s => s.is_active).map((s) => (
+                                             <div key={s.id} className="flex items-center space-x-2">
+                                               <Checkbox
+                                                 id={s.id}
+                                                 checked={completionData.selectedStaff.includes(s.id)}
+                                                 onCheckedChange={(checked) => {
+                                                   const updated = checked
+                                                     ? [...completionData.selectedStaff, s.id]
+                                                     : completionData.selectedStaff.filter(id => id !== s.id);
+                                                   setCompletionData({ ...completionData, selectedStaff: updated });
+                                                 }}
+                                               />
+                                               <label htmlFor={s.id} className="text-sm cursor-pointer">
+                                                 {s.name}
+                                               </label>
+                                             </div>
+                                           ))}
+                                         </div>
+                                       </div>
+
+                                       <div>
+                                         <Label>Hours Worked</Label>
+                                         <Select value={completionData.hoursWorked} onValueChange={(value) => setCompletionData({ ...completionData, hoursWorked: value })}>
+                                           <SelectTrigger>
+                                             <SelectValue placeholder="Select hours" />
+                                           </SelectTrigger>
+                                           <SelectContent>
+                                             {[0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.25, 2.5, 2.75, 3, 3.5, 4, 4.5, 5, 6, 7, 8].map(h => (
+                                               <SelectItem key={h} value={h.toString()}>{h} hours</SelectItem>
+                                             ))}
+                                           </SelectContent>
+                                         </Select>
+                                       </div>
+
+                                       <div className="grid grid-cols-2 gap-4">
+                                         <div>
+                                           <Label>Tax Rate (%)</Label>
+                                           <Input
+                                             type="number"
+                                             step="0.01"
+                                             placeholder="14"
+                                             value={completionData.taxRate}
+                                             onChange={(e) => setCompletionData({ ...completionData, taxRate: e.target.value })}
+                                           />
+                                         </div>
+                                         <div>
+                                           <Label>Discount ($)</Label>
+                                           <Input
+                                             type="number"
+                                             step="0.01"
+                                             placeholder="0.00"
+                                             value={completionData.discount}
+                                             onChange={(e) => setCompletionData({ ...completionData, discount: e.target.value })}
+                                           />
+                                         </div>
+                                       </div>
+
+                                       <div className="bg-muted p-4 rounded-lg space-y-2">
+                                         <div className="flex justify-between text-sm">
+                                           <span>Services Subtotal:</span>
+                                           <span>${calculateCompletionTotals().servicesSubtotal}</span>
+                                         </div>
+                                         <div className="flex justify-between text-sm">
+                                           <span>Items Subtotal:</span>
+                                           <span>${calculateCompletionTotals().itemsSubtotal}</span>
+                                         </div>
+                                         <div className="flex justify-between text-sm">
+                                           <span>Taxes ({completionData.taxRate}% on services):</span>
+                                           <span>${calculateCompletionTotals().taxes}</span>
+                                         </div>
+                                         {parseFloat(completionData.discount) > 0 && (
+                                           <div className="flex justify-between text-sm text-destructive">
+                                             <span>Discount:</span>
+                                             <span>-${parseFloat(completionData.discount).toFixed(2)}</span>
+                                           </div>
+                                         )}
+                                         <div className="flex justify-between font-bold pt-2 border-t">
+                                           <span>Total:</span>
+                                           <span>${calculateCompletionTotals().total}</span>
+                                         </div>
+                                       </div>
 
                                       <div>
                                         <Label>Notes</Label>
@@ -913,41 +1156,171 @@ export default function AdminDashboard() {
                 <p className="text-muted-foreground">No completed services found</p>
               ) : (
                 <div className="overflow-x-auto">
+                   <Table>
+                     <TableHeader>
+                       <TableRow>
+                         <TableHead>Date</TableHead>
+                         <TableHead>Confirmation #</TableHead>
+                         <TableHead>Customer</TableHead>
+                         <TableHead>Services</TableHead>
+                         <TableHead>Items</TableHead>
+                         <TableHead>Staff</TableHead>
+                         <TableHead>Hours</TableHead>
+                         <TableHead>Total</TableHead>
+                       </TableRow>
+                     </TableHeader>
+                     <TableBody>
+                       {completedServices.map((cs) => {
+                         const appointment = appointments.find(a => a.id === cs.appointment_id);
+                         return (
+                           <TableRow key={cs.id}>
+                             <TableCell>
+                               {new Date(cs.created_at).toLocaleDateString()}
+                             </TableCell>
+                             <TableCell className="font-mono text-xs">
+                               {appointment?.confirmation_number}
+                             </TableCell>
+                             <TableCell>{appointment?.customer_name}</TableCell>
+                             <TableCell>
+                               {cs.services_performed.map((s: any) => (
+                                 <div key={s.service} className="text-sm">
+                                   {s.service}: ${s.cost.toFixed(2)}
+                                 </div>
+                               ))}
+                             </TableCell>
+                             <TableCell className="text-sm">
+                               {Array.isArray(cs.items_purchased) 
+                                 ? cs.items_purchased.map((i: any) => (
+                                     <div key={i.name}>{i.name}: ${i.cost.toFixed(2)}</div>
+                                   ))
+                                 : cs.items_purchased || '-'}
+                             </TableCell>
+                             <TableCell className="text-sm">{getStaffNames(cs.staff_ids || []) || '-'}</TableCell>
+                             <TableCell className="text-sm">{cs.hours_worked || 0}h</TableCell>
+                             <TableCell className="font-medium">${cs.total_cost?.toFixed(2) || '0.00'}</TableCell>
+                           </TableRow>
+                         );
+                       })}
+                     </TableBody>
+                   </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="staff">
+          <Card className="shadow-strong">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle>Staff Management</CardTitle>
+              <Dialog open={staffDialogOpen} onOpenChange={setStaffDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button onClick={() => {
+                    setEditingStaff(null);
+                    setNewStaff({ name: "", email: "", phone: "" });
+                  }}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add Staff
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>{editingStaff ? "Edit Staff" : "Add New Staff"}</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div>
+                      <Label>Name</Label>
+                      <Input
+                        value={newStaff.name}
+                        onChange={(e) => setNewStaff({ ...newStaff, name: e.target.value })}
+                        placeholder="Staff name"
+                      />
+                    </div>
+                    <div>
+                      <Label>Email (Optional)</Label>
+                      <Input
+                        type="email"
+                        value={newStaff.email}
+                        onChange={(e) => setNewStaff({ ...newStaff, email: e.target.value })}
+                        placeholder="email@example.com"
+                      />
+                    </div>
+                    <div>
+                      <Label>Phone (Optional)</Label>
+                      <Input
+                        type="tel"
+                        value={newStaff.phone}
+                        onChange={(e) => setNewStaff({ ...newStaff, phone: e.target.value })}
+                        placeholder="(123) 456-7890"
+                      />
+                    </div>
+                    <Button onClick={handleSaveStaff} className="w-full" disabled={actionLoading === "staff"}>
+                      {actionLoading === "staff" ? "Saving..." : (editingStaff ? "Update Staff" : "Add Staff")}
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <p>Loading staff...</p>
+              ) : staff.length === 0 ? (
+                <p className="text-muted-foreground">No staff found</p>
+              ) : (
+                <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Date</TableHead>
-                        <TableHead>Confirmation #</TableHead>
-                        <TableHead>Customer</TableHead>
-                        <TableHead>Services Performed</TableHead>
-                        <TableHead>Items</TableHead>
-                        <TableHead>Total</TableHead>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Phone</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {completedServices.map((cs) => {
-                        const appointment = appointments.find(a => a.id === cs.appointment_id);
-                        return (
-                          <TableRow key={cs.id}>
-                            <TableCell>
-                              {new Date(cs.created_at).toLocaleDateString()}
-                            </TableCell>
-                            <TableCell className="font-mono text-xs">
-                              {appointment?.confirmation_number}
-                            </TableCell>
-                            <TableCell>{appointment?.customer_name}</TableCell>
-                            <TableCell>
-                              {cs.services_performed.map((s: any) => (
-                                <div key={s.service} className="text-sm">
-                                  {s.service}: ${s.cost.toFixed(2)}
-                                </div>
-                              ))}
-                            </TableCell>
-                            <TableCell className="text-sm">{cs.items_purchased || '-'}</TableCell>
-                            <TableCell className="font-medium">${cs.total_cost?.toFixed(2) || '0.00'}</TableCell>
-                          </TableRow>
-                        );
-                      })}
+                      {staff.map((s) => (
+                        <TableRow key={s.id}>
+                          <TableCell className="font-medium">{s.name}</TableCell>
+                          <TableCell>{s.email || '-'}</TableCell>
+                          <TableCell>{s.phone || '-'}</TableCell>
+                          <TableCell>
+                            <Badge variant={s.is_active ? "default" : "secondary"}>
+                              {s.is_active ? "Active" : "Inactive"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={actionLoading === s.id}
+                                onClick={() => {
+                                  setEditingStaff(s);
+                                  setNewStaff({
+                                    name: s.name,
+                                    email: s.email || "",
+                                    phone: s.phone || ""
+                                  });
+                                  setStaffDialogOpen(true);
+                                }}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              {s.is_active && (
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  disabled={actionLoading === s.id}
+                                  onClick={() => handleDeleteStaff(s.id)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
                     </TableBody>
                   </Table>
                 </div>

@@ -18,6 +18,9 @@ const bookingSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(100),
   email: z.string().trim().email("Invalid email address").max(255),
   phone: z.string().trim().min(10, "Phone number must be at least 10 digits").max(20),
+  carMake: z.string().trim().min(1, "Car make is required").max(50),
+  carModel: z.string().trim().min(1, "Car model is required").max(50),
+  carYear: z.number().min(1900, "Invalid year").max(new Date().getFullYear() + 1),
   notes: z.string().max(1000).optional(),
 });
 
@@ -35,6 +38,9 @@ export default function BookAppointment() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [carMake, setCarMake] = useState("");
+  const [carModel, setCarModel] = useState("");
+  const [carYear, setCarYear] = useState(new Date().getFullYear());
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -153,7 +159,7 @@ export default function BookAppointment() {
     if (submitting) return;
     
     try {
-      const validation = bookingSchema.parse({ name, email, phone, notes });
+      const validation = bookingSchema.parse({ name, email, phone, carMake, carModel, carYear, notes });
       
       if (selectedServices.length === 0) {
         toast({
@@ -240,6 +246,9 @@ export default function BookAppointment() {
           customer_name: validation.name,
           customer_email: validation.email,
           customer_phone: validation.phone,
+          car_make: validation.carMake,
+          car_model: validation.carModel,
+          car_year: validation.carYear,
           appointment_date: date.toISOString().split('T')[0],
           appointment_time: timeSlot,
           service_ids: selectedServices,
@@ -279,6 +288,9 @@ export default function BookAppointment() {
       setName("");
       setEmail("");
       setPhone("");
+      setCarMake("");
+      setCarModel("");
+      setCarYear(new Date().getFullYear());
       setNotes("");
     } catch (error: any) {
       if (error instanceof z.ZodError) {
@@ -555,6 +567,43 @@ export default function BookAppointment() {
                       onChange={(e) => setPhone(e.target.value)}
                       required
                       maxLength={20}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="carMake">Car Make *</Label>
+                    <Input
+                      id="carMake"
+                      value={carMake}
+                      onChange={(e) => setCarMake(e.target.value)}
+                      placeholder="e.g., Toyota, Honda"
+                      required
+                      maxLength={50}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="carModel">Car Model *</Label>
+                    <Input
+                      id="carModel"
+                      value={carModel}
+                      onChange={(e) => setCarModel(e.target.value)}
+                      placeholder="e.g., Camry, Civic"
+                      required
+                      maxLength={50}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="carYear">Car Year *</Label>
+                    <Input
+                      id="carYear"
+                      type="number"
+                      value={carYear}
+                      onChange={(e) => setCarYear(parseInt(e.target.value))}
+                      required
+                      min={1900}
+                      max={new Date().getFullYear() + 1}
                     />
                   </div>
 
