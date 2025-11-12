@@ -119,6 +119,7 @@ export default function AdminDashboard() {
     open: false,
     service: null as CompletedService | null,
     email: "",
+    loading: false,
   });
   const [groupBy, setGroupBy] = useState<"month" | "staff">("month");
   const [staffExportDialogOpen, setStaffExportDialogOpen] = useState(false);
@@ -949,6 +950,7 @@ export default function AdminDashboard() {
       open: true,
       service,
       email: service.customer_email || "",
+      loading: false,
     });
   };
 
@@ -961,6 +963,9 @@ export default function AdminDashboard() {
       });
       return;
     }
+
+    // Lock the button
+    setReceiptDialog(prev => ({ ...prev, loading: true }));
 
     try {
       const { data, error } = await supabase.functions.invoke("send-receipt-email", {
@@ -976,12 +981,19 @@ export default function AdminDashboard() {
         title: "Receipt sent",
         description: "Receipt email sent successfully!",
       });
-      setReceiptDialog({ open: false, service: null, email: "" });
+      
+      // Close dialog on success
+      setReceiptDialog({ open: false, service: null, email: "", loading: false });
     } catch (error: any) {
       console.error("Error sending receipt:", error);
+      
+      // Close dialog on error
+      setReceiptDialog({ open: false, service: null, email: "", loading: false });
+      
+      // Show error message
       toast({
         title: "Error sending receipt",
-        description: error.message,
+        description: error.message || "Failed to send receipt",
         variant: "destructive",
       });
     }
@@ -2772,11 +2784,18 @@ export default function AdminDashboard() {
               </div>
 
               <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setReceiptDialog({ open: false, service: null, email: "" })}>
+                <Button 
+                  variant="outline" 
+                  onClick={() => setReceiptDialog({ open: false, service: null, email: "", loading: false })}
+                  disabled={receiptDialog.loading}
+                >
                   Cancel
                 </Button>
-                <Button onClick={sendReceipt}>
-                  Send Receipt
+                <Button 
+                  onClick={sendReceipt}
+                  disabled={receiptDialog.loading}
+                >
+                  {receiptDialog.loading ? "Sending..." : "Send Receipt"}
                 </Button>
               </div>
             </div>
