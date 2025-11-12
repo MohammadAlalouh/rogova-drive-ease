@@ -55,6 +55,8 @@ export default function BookAppointment() {
     "12:00", "12:30", "13:00", "13:30", "14:00", "14:30",
     "15:00", "15:30", "16:00", "16:30", "17:00"
   ];
+  const [availableTimes, setAvailableTimes] = useState<string[]>(timeSlots);
+  const [dayAppointments, setDayAppointments] = useState<Array<{ appointment_time: string; service_ids: string[]; status: string }>>([]);
 
   useEffect(() => {
     fetchServices();
@@ -89,6 +91,61 @@ export default function BookAppointment() {
         : [...prev, serviceId]
     );
   };
+
+  // Recompute availability whenever date or selected services change
+  useEffect(() => {
+    const compute = async () => {
+      if (!date) {
+        setAvailableTimes(timeSlots);
+        setDayAppointments([]);
+        return;
+      }
+
+      const dateStr = date.toISOString().split('T')[0];
+      const { data, error } = await supabase
+        .from('appointments')
+        .select('appointment_time, service_ids, status')
+        .eq('appointment_date', dateStr)
+        .neq('status', 'cancelled');
+
+      if (!error) {
+        setDayAppointments(data || []);
+      }
+
+      const totalDuration = services
+        .filter(s => selectedServices.includes(s.id))
+        .reduce((sum, s) => sum + s.duration_minutes, 0);
+
+      if (selectedServices.length === 0 || totalDuration === 0) {
+        setAvailableTimes(timeSlots);
+        return;
+      }
+
+      const minutes = (t: string) => parseInt(t.split(':')[0]) * 60 + parseInt(t.split(':')[1]);
+
+      const available = timeSlots.filter(slot => {
+        const start = minutes(slot);
+        const end = start + totalDuration;
+
+        for (const apt of (data || [])) {
+          const aptStart = minutes(apt.appointment_time);
+          const aptDuration = services
+            .filter(s => apt.service_ids.includes(s.id))
+            .reduce((sum, s) => sum + s.duration_minutes, 0);
+          const aptEnd = aptStart + aptDuration;
+
+          if (start < aptEnd && end > aptStart) {
+            return false; // overlap, slot unavailable
+          }
+        }
+        return true;
+      });
+
+      setAvailableTimes(available);
+    };
+
+    compute();
+  }, [date, selectedServices, services]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -450,18 +507,18 @@ export default function BookAppointment() {
                 {/* Time Slot Selection */}
                 <div className="space-y-2">
                   <Label htmlFor="timeSlot">Select Time Slot *</Label>
-                  <Select value={timeSlot} onValueChange={setTimeSlot}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Choose a time" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {timeSlots.map((slot) => (
-                        <SelectItem key={slot} value={slot}>
-                          {slot}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    <Select value={timeSlot} onValueChange={setTimeSlot} disabled={!date || selectedServices.length === 0}>
+                      <SelectTrigger>
+                        <SelectValue placeholder={(!date || selectedServices.length === 0) ? "Select date and services first" : (availableTimes.length ? "Choose a time" : "No times available") } />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableTimes.map((slot) => (
+                          <SelectItem key={slot} value={slot}>
+                            {slot}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                 </div>
 
                 {/* Customer Information */}

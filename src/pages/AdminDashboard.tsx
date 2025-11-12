@@ -45,6 +45,7 @@ export default function AdminDashboard() {
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
   const [editDate, setEditDate] = useState<Date>();
   const [editTime, setEditTime] = useState("");
+  const [availableEditTimes, setAvailableEditTimes] = useState<string[]>([]);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingService, setEditingService] = useState<Service | null>(null);
@@ -68,6 +69,31 @@ export default function AdminDashboard() {
     checkAuth();
     fetchData();
   }, []);
+
+  // Compute available edit times whenever inputs change
+  useEffect(() => {
+    if (!editingAppointment || !editDate) return;
+
+    const minutes = (t: string) => parseInt(t.split(':')[0]) * 60 + parseInt(t.split(':')[1]);
+    const dateStr = editDate.toISOString().split('T')[0];
+    const others = appointments.filter(a => a.id !== editingAppointment.id && a.appointment_date === dateStr && a.status !== 'cancelled');
+
+    const serviceDuration = (ids: string[]) => services.filter(s => ids.includes(s.id)).reduce((sum, s) => sum + s.duration_minutes, 0);
+    const currentDuration = serviceDuration(editingAppointment.service_ids);
+
+    const available = timeSlots.filter(slot => {
+      const start = minutes(slot);
+      const end = start + currentDuration;
+      for (const apt of others) {
+        const s = minutes(apt.appointment_time);
+        const e = s + serviceDuration(apt.service_ids);
+        if (start < e && end > s) return false;
+      }
+      return true;
+    });
+
+    setAvailableEditTimes(available);
+  }, [editingAppointment, editDate, appointments, services]);
 
   const checkAuth = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -504,7 +530,7 @@ export default function AdminDashboard() {
                                             <SelectValue />
                                           </SelectTrigger>
                                           <SelectContent>
-                                            {timeSlots.map((slot) => (
+                                            {availableEditTimes.map((slot) => (
                                               <SelectItem key={slot} value={slot}>
                                                 {slot}
                                               </SelectItem>

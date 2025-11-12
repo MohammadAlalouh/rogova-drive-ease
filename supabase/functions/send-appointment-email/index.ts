@@ -122,7 +122,20 @@ const handler = async (req: Request): Promise<Response> => {
     const { Resend } = await import("https://esm.sh/resend@4.0.0");
     const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 
-    const customerSend = await resend.emails.send({
+    // Retry helper to mitigate 429 rate limits
+    const sendWithRetry = async (payload: any, retries = 2) => {
+      let attempt = 0;
+      while (true) {
+        const result: any = await resend.emails.send(payload);
+        if (!result?.error) return result;
+        const status = (result.error as any)?.statusCode ?? (result.error as any)?.status ?? 0;
+        if (status !== 429 || attempt >= retries) return result;
+        await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
+        attempt++;
+      }
+    };
+
+    const customerSend = await sendWithRetry({
       from: "Rogova Auto Shop <onboarding@resend.dev>",
       to: [to],
       subject: emailSubject,
@@ -134,7 +147,7 @@ const handler = async (req: Request): Promise<Response> => {
     // Wait 600ms to respect rate limits
     await new Promise((r) => setTimeout(r, 600));
 
-    const adminSend = await resend.emails.send({
+    const adminSend = await sendWithRetry({
       from: "Rogova Auto Shop <onboarding@resend.dev>",
       to: [adminEmail],
       subject: `[Admin] ${emailSubject}`,
