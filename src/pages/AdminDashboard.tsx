@@ -1127,6 +1127,7 @@ export default function AdminDashboard() {
                             <TableHead className="min-w-[120px]">Date & Time</TableHead>
                             <TableHead className="min-w-[150px]">Services</TableHead>
                             <TableHead className="min-w-[150px]">Car Info</TableHead>
+                            <TableHead className="min-w-[200px]">Notes</TableHead>
                             <TableHead className="min-w-[100px]">Status</TableHead>
                             <TableHead className="min-w-[180px]">Actions</TableHead>
                           </TableRow>
@@ -1155,6 +1156,15 @@ export default function AdminDashboard() {
                           <TableCell>{getServiceNames(appointment.service_ids)}</TableCell>
                           <TableCell className="text-sm">
                             {appointment.car_year} {appointment.car_make} {appointment.car_model}
+                          </TableCell>
+                          <TableCell className="text-sm max-w-[200px]">
+                            {appointment.notes ? (
+                              <div className="truncate" title={appointment.notes}>
+                                {appointment.notes}
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground italic">No notes</span>
+                            )}
                           </TableCell>
                           <TableCell>{getStatusBadge(appointment.status)}</TableCell>
                           <TableCell>
