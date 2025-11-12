@@ -70,7 +70,7 @@ export type Database = {
       }
       completed_services: {
         Row: {
-          appointment_id: string
+          appointment_id: string | null
           created_at: string
           hours_worked: number | null
           id: string
@@ -85,7 +85,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          appointment_id: string
+          appointment_id?: string | null
           created_at?: string
           hours_worked?: number | null
           id?: string
@@ -100,7 +100,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
-          appointment_id?: string
+          appointment_id?: string | null
           created_at?: string
           hours_worked?: number | null
           id?: string
