@@ -98,6 +98,20 @@ export default function AdminDashboard() {
   const [groupBy, setGroupBy] = useState<"month" | "staff">("month");
   const [staffDialogOpen, setStaffDialogOpen] = useState(false);
   const [editingStaff, setEditingStaff] = useState<Staff | null>(null);
+  const [addAppointmentDialogOpen, setAddAppointmentDialogOpen] = useState(false);
+  const [newAppointment, setNewAppointment] = useState({
+    customerName: "",
+    customerEmail: "",
+    customerPhone: "",
+    carMake: "",
+    carModel: "",
+    carYear: new Date().getFullYear(),
+    serviceIds: [] as string[],
+    appointmentDate: undefined as Date | undefined,
+    appointmentTime: "",
+    notes: "",
+    sendEmail: true
+  });
   const [newStaff, setNewStaff] = useState({
     name: "",
     email: "",
@@ -661,6 +675,119 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleAddAppointment = async () => {
+    if (actionLoading) return;
+
+    // Validation
+    if (!newAppointment.customerName || !newAppointment.customerPhone) {
+      toast({
+        title: "Missing information",
+        description: "Customer name and phone are required",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (newAppointment.serviceIds.length === 0) {
+      toast({
+        title: "No services selected",
+        description: "Please select at least one service",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!newAppointment.appointmentDate || !newAppointment.appointmentTime) {
+      toast({
+        title: "Missing date/time",
+        description: "Please select appointment date and time",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setActionLoading("add-appointment");
+
+    try {
+      // Generate confirmation number
+      const { data: confData, error: confError } = await supabase.rpc('generate_confirmation_number');
+      if (confError) throw confError;
+
+      // Insert appointment
+      const { error: insertError } = await supabase
+        .from('appointments')
+        .insert({
+          customer_name: newAppointment.customerName,
+          customer_email: newAppointment.customerEmail || '',
+          customer_phone: newAppointment.customerPhone,
+          car_make: newAppointment.carMake,
+          car_model: newAppointment.carModel,
+          car_year: newAppointment.carYear,
+          service_ids: newAppointment.serviceIds,
+          appointment_date: newAppointment.appointmentDate.toISOString().split('T')[0],
+          appointment_time: newAppointment.appointmentTime,
+          notes: newAppointment.notes || null,
+          confirmation_number: confData,
+          status: 'pending'
+        });
+
+      if (insertError) throw insertError;
+
+      // Send email if requested and email provided
+      if (newAppointment.sendEmail && newAppointment.customerEmail) {
+        const selectedServiceNames = services
+          .filter(s => newAppointment.serviceIds.includes(s.id))
+          .map(s => s.name);
+
+        await supabase.functions.invoke('send-appointment-email', {
+          body: {
+            to: newAppointment.customerEmail,
+            customerName: newAppointment.customerName,
+            confirmationNumber: confData,
+            appointmentDate: newAppointment.appointmentDate.toLocaleDateString(),
+            appointmentTime: newAppointment.appointmentTime,
+            services: selectedServiceNames,
+            carMake: newAppointment.carMake,
+            carModel: newAppointment.carModel,
+            carYear: newAppointment.carYear,
+            action: 'booking',
+            notes: newAppointment.notes
+          }
+        });
+      }
+
+      toast({
+        title: "Appointment created",
+        description: `Confirmation: ${confData}${newAppointment.sendEmail && newAppointment.customerEmail ? ' (email sent)' : ''}`,
+      });
+
+      // Reset form
+      setNewAppointment({
+        customerName: "",
+        customerEmail: "",
+        customerPhone: "",
+        carMake: "",
+        carModel: "",
+        carYear: new Date().getFullYear(),
+        serviceIds: [],
+        appointmentDate: undefined,
+        appointmentTime: "",
+        notes: "",
+        sendEmail: true
+      });
+      setAddAppointmentDialogOpen(false);
+      fetchData();
+    } catch (error: any) {
+      toast({
+        title: "Error creating appointment",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const getStaffNames = (staffIds: string[]) => {
     return staff
       .filter(s => staffIds.includes(s.id))
@@ -820,8 +947,167 @@ export default function AdminDashboard() {
 
             <TabsContent value="appointments">
               <Card className="shadow-strong">
-                <CardHeader>
+                <CardHeader className="flex flex-row items-center justify-between">
                   <CardTitle className="text-lg md:text-xl">All Appointments</CardTitle>
+                  <Dialog open={addAppointmentDialogOpen} onOpenChange={setAddAppointmentDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button size="sm">
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Appointment
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-[95vw] md:max-w-[600px] max-h-[90vh] overflow-y-auto">
+                      <DialogHeader>
+                        <DialogTitle>Create New Appointment</DialogTitle>
+                        <DialogDescription>
+                          Add a walk-in or phone appointment manually
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="customerName">Customer Name *</Label>
+                          <Input
+                            id="customerName"
+                            value={newAppointment.customerName}
+                            onChange={(e) => setNewAppointment({ ...newAppointment, customerName: e.target.value })}
+                            placeholder="John Doe"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="customerPhone">Phone Number *</Label>
+                          <Input
+                            id="customerPhone"
+                            value={newAppointment.customerPhone}
+                            onChange={(e) => setNewAppointment({ ...newAppointment, customerPhone: e.target.value })}
+                            placeholder="(555) 123-4567"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="customerEmail">Email (Optional)</Label>
+                          <Input
+                            id="customerEmail"
+                            type="email"
+                            value={newAppointment.customerEmail}
+                            onChange={(e) => setNewAppointment({ ...newAppointment, customerEmail: e.target.value })}
+                            placeholder="john@example.com"
+                          />
+                        </div>
+                        <div className="grid grid-cols-3 gap-2">
+                          <div className="space-y-2">
+                            <Label htmlFor="carYear">Year</Label>
+                            <Input
+                              id="carYear"
+                              type="number"
+                              value={newAppointment.carYear}
+                              onChange={(e) => setNewAppointment({ ...newAppointment, carYear: parseInt(e.target.value) || new Date().getFullYear() })}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="carMake">Make</Label>
+                            <Input
+                              id="carMake"
+                              value={newAppointment.carMake}
+                              onChange={(e) => setNewAppointment({ ...newAppointment, carMake: e.target.value })}
+                              placeholder="Toyota"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="carModel">Model</Label>
+                            <Input
+                              id="carModel"
+                              value={newAppointment.carModel}
+                              onChange={(e) => setNewAppointment({ ...newAppointment, carModel: e.target.value })}
+                              placeholder="Camry"
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Services *</Label>
+                          <div className="space-y-2 max-h-40 overflow-y-auto border rounded-md p-3">
+                            {services.map(service => (
+                              <div key={service.id} className="flex items-center space-x-2">
+                                <Checkbox
+                                  id={`service-${service.id}`}
+                                  checked={newAppointment.serviceIds.includes(service.id)}
+                                  onCheckedChange={(checked) => {
+                                    if (checked) {
+                                      setNewAppointment({
+                                        ...newAppointment,
+                                        serviceIds: [...newAppointment.serviceIds, service.id]
+                                      });
+                                    } else {
+                                      setNewAppointment({
+                                        ...newAppointment,
+                                        serviceIds: newAppointment.serviceIds.filter(id => id !== service.id)
+                                      });
+                                    }
+                                  }}
+                                />
+                                <label htmlFor={`service-${service.id}`} className="text-sm cursor-pointer">
+                                  {service.name} ({service.duration_minutes} min)
+                                </label>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Appointment Date *</Label>
+                          <Calendar
+                            mode="single"
+                            selected={newAppointment.appointmentDate}
+                            onSelect={(date) => setNewAppointment({ ...newAppointment, appointmentDate: date })}
+                            disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
+                            className="rounded-md border"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="appointmentTime">Time Slot *</Label>
+                          <Select
+                            value={newAppointment.appointmentTime}
+                            onValueChange={(value) => setNewAppointment({ ...newAppointment, appointmentTime: value })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select time" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {timeSlots.map(time => (
+                                <SelectItem key={time} value={time}>{time}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="notes">Notes</Label>
+                          <Textarea
+                            id="notes"
+                            value={newAppointment.notes}
+                            onChange={(e) => setNewAppointment({ ...newAppointment, notes: e.target.value })}
+                            placeholder="Additional notes..."
+                            rows={3}
+                          />
+                        </div>
+                        {newAppointment.customerEmail && (
+                          <div className="flex items-center space-x-2">
+                            <Checkbox
+                              id="sendEmail"
+                              checked={newAppointment.sendEmail}
+                              onCheckedChange={(checked) => setNewAppointment({ ...newAppointment, sendEmail: !!checked })}
+                            />
+                            <label htmlFor="sendEmail" className="text-sm cursor-pointer">
+                              Send confirmation email
+                            </label>
+                          </div>
+                        )}
+                        <Button 
+                          onClick={handleAddAppointment} 
+                          className="w-full" 
+                          disabled={actionLoading === "add-appointment"}
+                        >
+                          {actionLoading === "add-appointment" ? "Creating..." : "Create Appointment"}
+                        </Button>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
                 </CardHeader>
                 <CardContent className="px-2 md:px-6">
               {loading ? (
