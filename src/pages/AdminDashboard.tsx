@@ -98,7 +98,7 @@ export default function AdminDashboard() {
   const [groupBy, setGroupBy] = useState<"month" | "staff">("month");
   const [staffDialogOpen, setStaffDialogOpen] = useState(false);
   const [editingStaff, setEditingStaff] = useState<Staff | null>(null);
-  const [appointmentView, setAppointmentView] = useState<"all" | "by-day">("all");
+  const [appointmentView, setAppointmentView] = useState<"all" | "by-day" | "today">("today");
   const [addAppointmentDialogOpen, setAddAppointmentDialogOpen] = useState(false);
   const [newAppointment, setNewAppointment] = useState({
     customerName: "",
@@ -833,6 +833,11 @@ export default function AdminDashboard() {
     );
   };
 
+  const getTodaysAppointments = () => {
+    const today = new Date().toISOString().split('T')[0];
+    return appointments.filter(apt => apt.appointment_date === today);
+  };
+
   const groupAppointmentsByDay = () => {
     const grouped: Record<string, Appointment[]> = {};
     appointments.forEach(apt => {
@@ -1153,6 +1158,13 @@ export default function AdminDashboard() {
                     <div className="flex gap-2">
                       <Button
                         size="sm"
+                        variant={appointmentView === "today" ? "default" : "outline"}
+                        onClick={() => setAppointmentView("today")}
+                      >
+                        Today
+                      </Button>
+                      <Button
+                        size="sm"
                         variant={appointmentView === "all" ? "default" : "outline"}
                         onClick={() => setAppointmentView("all")}
                       >
@@ -1332,6 +1344,39 @@ export default function AdminDashboard() {
                 <p>Loading appointments...</p>
               ) : appointments.length === 0 ? (
                 <p className="text-muted-foreground">No appointments found</p>
+              ) : appointmentView === "today" ? (
+                // Today's appointments view
+                (() => {
+                  const todaysAppointments = getTodaysAppointments();
+                  return todaysAppointments.length === 0 ? (
+                    <p className="text-muted-foreground">No appointments scheduled for today</p>
+                  ) : (
+                    <div className="overflow-x-auto -mx-2 md:mx-0">
+                      <div className="inline-block min-w-full align-middle">
+                        <div className="overflow-hidden">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="min-w-[120px]">Confirmation #</TableHead>
+                                <TableHead className="min-w-[120px]">Customer</TableHead>
+                                <TableHead className="min-w-[150px]">Contact</TableHead>
+                                <TableHead className="min-w-[120px]">Time</TableHead>
+                                <TableHead className="min-w-[150px]">Services</TableHead>
+                                <TableHead className="min-w-[150px]">Car Info</TableHead>
+                                <TableHead className="min-w-[200px]">Notes</TableHead>
+                                <TableHead className="min-w-[100px]">Status</TableHead>
+                                <TableHead className="min-w-[180px]">Actions</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {todaysAppointments.map((appointment) => renderAppointmentRow(appointment, false))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()
               ) : appointmentView === "by-day" ? (
                 // Grouped by day view
                 <div className="space-y-6">
