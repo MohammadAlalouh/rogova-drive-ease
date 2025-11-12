@@ -453,40 +453,40 @@ export default function BookAppointment() {
     <div className="min-h-screen bg-background">
       <Navigation />
       
-      <section className="py-20">
-        <div className="container max-w-4xl">
-          <div className="text-center mb-12">
-            <h1 className="text-4xl md:text-5xl font-bold mb-4">Book Your Appointment</h1>
-            <p className="text-xl text-muted-foreground">
+      <section className="py-8 md:py-20">
+        <div className="container max-w-4xl px-4">
+          <div className="text-center mb-8 md:mb-12">
+            <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-3 md:mb-4">Book Your Appointment</h1>
+            <p className="text-base md:text-xl text-muted-foreground">
               Select your services, choose a time, and manage your bookings
             </p>
           </div>
 
           <Tabs defaultValue="book" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 mb-8">
-              <TabsTrigger value="book">Book New Appointment</TabsTrigger>
-              <TabsTrigger value="manage">Manage Appointment</TabsTrigger>
+            <TabsList className="grid w-full grid-cols-2 mb-6 md:mb-8 h-auto">
+              <TabsTrigger value="book" className="text-sm md:text-base py-2.5">Book New</TabsTrigger>
+              <TabsTrigger value="manage" className="text-sm md:text-base py-2.5">Manage</TabsTrigger>
             </TabsList>
 
             <TabsContent value="book">
               <Card className="shadow-strong">
-            <CardHeader>
-              <CardTitle>Appointment Details</CardTitle>
-              <CardDescription>
+            <CardHeader className="px-4 md:px-6">
+              <CardTitle className="text-lg md:text-xl">Appointment Details</CardTitle>
+              <CardDescription className="text-sm">
                 Fill out the form below to schedule your service
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <form onSubmit={handleSubmit} className="space-y-6">
+            <CardContent className="px-4 md:px-6">
+              <form onSubmit={handleSubmit} className="space-y-5 md:space-y-6">
                 {/* Services Selection */}
-                <div className="space-y-4">
-                  <Label>Select Services *</Label>
+                <div className="space-y-3 md:space-y-4">
+                  <Label className="text-base">Select Services *</Label>
                   {loading ? (
-                    <p className="text-muted-foreground">Loading services...</p>
+                    <p className="text-muted-foreground text-sm">Loading services...</p>
                   ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-3 md:gap-4">
                       {services.map((service) => (
-                        <div key={service.id} className="flex items-center space-x-2">
+                        <div key={service.id} className="flex items-center space-x-3 p-3 rounded-lg border hover:bg-muted/50 transition-colors">
                           <Checkbox
                             id={service.id}
                             checked={selectedServices.includes(service.id)}
@@ -494,7 +494,7 @@ export default function BookAppointment() {
                           />
                           <label
                             htmlFor={service.id}
-                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                            className="text-sm font-medium leading-tight cursor-pointer flex-1"
                           >
                             {service.name}
                           </label>
@@ -505,22 +505,24 @@ export default function BookAppointment() {
                 </div>
 
                 {/* Date Selection */}
-                <div className="space-y-2">
-                  <Label>Select Date *</Label>
-                  <Calendar
-                    mode="single"
-                    selected={date}
-                    onSelect={setDate}
-                    disabled={(date) => date < new Date() || date.getDay() === 0}
-                    className="rounded-md border p-3 pointer-events-auto"
-                  />
+                <div className="space-y-3">
+                  <Label className="text-base">Select Date *</Label>
+                  <div className="flex justify-center">
+                    <Calendar
+                      mode="single"
+                      selected={date}
+                      onSelect={setDate}
+                      disabled={(date) => date < new Date() || date.getDay() === 0}
+                      className="rounded-md border p-2 md:p-3 pointer-events-auto w-full max-w-full"
+                    />
+                  </div>
                 </div>
 
                 {/* Time Slot Selection */}
                 <div className="space-y-2">
-                  <Label htmlFor="timeSlot">Select Time Slot *</Label>
+                  <Label htmlFor="timeSlot" className="text-base">Select Time Slot *</Label>
                     <Select value={timeSlot} onValueChange={setTimeSlot} disabled={!date || selectedServices.length === 0}>
-                      <SelectTrigger>
+                      <SelectTrigger className="h-11">
                         <SelectValue placeholder={(!date || selectedServices.length === 0) ? "Select date and services first" : (availableTimes.length ? "Choose a time" : "No times available") } />
                       </SelectTrigger>
                       <SelectContent>
@@ -536,66 +538,89 @@ export default function BookAppointment() {
                 {/* Customer Information */}
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="name">Full Name *</Label>
+                    <Label htmlFor="name" className="text-base">Full Name *</Label>
                     <Input
                       id="name"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       required
                       maxLength={100}
+                      className="h-11"
                     />
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email Address *</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      required
-                      maxLength={255}
-                    />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="email" className="text-base">Email Address *</Label>
+                      <Input
+                        id="email"
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        required
+                        maxLength={255}
+                        className="h-11"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="phone" className="text-base">Phone Number *</Label>
+                      <Input
+                        id="phone"
+                        type="tel"
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                        required
+                        maxLength={20}
+                        className="h-11"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="carMake" className="text-base">Car Make *</Label>
+                      <Input
+                        id="carMake"
+                        value={carMake}
+                        onChange={(e) => setCarMake(e.target.value)}
+                        placeholder="e.g., Toyota"
+                        required
+                        maxLength={50}
+                        className="h-11"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="carModel" className="text-base">Car Model *</Label>
+                      <Input
+                        id="carModel"
+                        value={carModel}
+                        onChange={(e) => setCarModel(e.target.value)}
+                        placeholder="e.g., Camry"
+                        required
+                        maxLength={50}
+                        className="h-11"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="carYear" className="text-base">Car Year *</Label>
+                      <Input
+                        id="carYear"
+                        type="number"
+                        value={carYear}
+                        onChange={(e) => setCarYear(parseInt(e.target.value))}
+                        required
+                        min={1900}
+                        max={new Date().getFullYear() + 1}
+                        className="h-11"
+                      />
+                    </div>
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="phone">Phone Number *</Label>
-                    <Input
-                      id="phone"
-                      type="tel"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      required
-                      maxLength={20}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="carMake">Car Make *</Label>
-                    <Input
-                      id="carMake"
-                      value={carMake}
-                      onChange={(e) => setCarMake(e.target.value)}
-                      placeholder="e.g., Toyota, Honda"
-                      required
-                      maxLength={50}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="carModel">Car Model *</Label>
-                    <Input
-                      id="carModel"
-                      value={carModel}
-                      onChange={(e) => setCarModel(e.target.value)}
-                      placeholder="e.g., Camry, Civic"
-                      required
-                      maxLength={50}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="carYear">Car Year *</Label>
+                    <Label htmlFor="notes" className="text-base">Additional Notes (Optional)</Label>
                     <Input
                       id="carYear"
                       type="number"
@@ -616,13 +641,14 @@ export default function BookAppointment() {
                       placeholder="Any specific concerns or requests?"
                       maxLength={1000}
                       rows={4}
+                      className="resize-none"
                     />
                   </div>
                 </div>
 
                 <Button 
                   type="submit" 
-                  className="w-full bg-accent hover:bg-accent/90"
+                  className="w-full bg-accent hover:bg-accent/90 h-11 text-base font-medium"
                   disabled={submitting}
                 >
                   {submitting ? "Booking..." : "Book Appointment"}
@@ -634,71 +660,74 @@ export default function BookAppointment() {
 
             <TabsContent value="manage">
               <Card className="shadow-strong">
-                <CardHeader>
-                  <CardTitle>Looking for Your Appointment?</CardTitle>
-                  <CardDescription>
+                <CardHeader className="px-4 md:px-6">
+                  <CardTitle className="text-lg md:text-xl">Looking for Your Appointment?</CardTitle>
+                  <CardDescription className="text-sm">
                     Enter your confirmation number and contact information to view, edit, or cancel your appointment
                   </CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="px-4 md:px-6">
                   {!foundAppointment ? (
                     <div className="space-y-4">
                       <div className="space-y-2">
-                        <Label htmlFor="lookupConfirmation">Confirmation Number *</Label>
+                        <Label htmlFor="lookupConfirmation" className="text-base">Confirmation Number *</Label>
                         <Input
                           id="lookupConfirmation"
                           placeholder="CONF-XXXXXXXX"
                           value={lookupConfirmation}
                           onChange={(e) => setLookupConfirmation(e.target.value.toUpperCase())}
+                          className="h-11"
                         />
                       </div>
 
                       <div className="space-y-2">
-                        <Label htmlFor="lookupEmail">Email Address</Label>
+                        <Label htmlFor="lookupEmail" className="text-base">Email Address</Label>
                         <Input
                           id="lookupEmail"
                           type="email"
                           placeholder="your@email.com"
                           value={lookupEmail}
                           onChange={(e) => setLookupEmail(e.target.value)}
+                          className="h-11"
                         />
                       </div>
 
-                      <div className="text-center text-muted-foreground">OR</div>
+                      <div className="text-center text-muted-foreground text-sm font-medium py-2">OR</div>
 
                       <div className="space-y-2">
-                        <Label htmlFor="lookupPhone">Phone Number</Label>
+                        <Label htmlFor="lookupPhone" className="text-base">Phone Number</Label>
                         <Input
                           id="lookupPhone"
                           type="tel"
                           placeholder="(123) 456-7890"
                           value={lookupPhone}
                           onChange={(e) => setLookupPhone(e.target.value)}
+                          className="h-11"
                         />
                       </div>
 
                       <Button
                         onClick={handleLookupAppointment}
                         disabled={lookingUp}
-                        className="w-full bg-accent hover:bg-accent/90"
+                        className="w-full bg-accent hover:bg-accent/90 h-11 text-base font-medium"
                       >
                         {lookingUp ? "Looking up..." : "Find My Appointment"}
                       </Button>
                     </div>
                   ) : (
-                    <div className="space-y-6">
-                      <div className="p-4 bg-muted rounded-lg space-y-3">
+                    <div className="space-y-5 md:space-y-6">
+                      <div className="p-4 md:p-5 bg-muted rounded-lg space-y-3">
                         <div>
-                          <Label className="text-muted-foreground">Confirmation Number</Label>
-                          <p className="font-semibold">{foundAppointment.confirmation_number}</p>
+                          <Label className="text-muted-foreground text-sm">Confirmation Number</Label>
+                          <p className="font-semibold text-base mt-1">{foundAppointment.confirmation_number}</p>
                         </div>
                         <div>
-                          <Label className="text-muted-foreground">Status</Label>
-                          <p className="font-semibold capitalize">{foundAppointment.status}</p>
+                          <Label className="text-muted-foreground text-sm">Status</Label>
+                          <p className="font-semibold capitalize text-base mt-1">{foundAppointment.status}</p>
                         </div>
                         <div>
-                          <Label className="text-muted-foreground">Date & Time</Label>
-                          <p className="font-semibold">
+                          <Label className="text-muted-foreground text-sm">Date & Time</Label>
+                          <p className="font-semibold text-base mt-1">
                             {new Date(foundAppointment.appointment_date).toLocaleDateString()} at {foundAppointment.appointment_time}
                           </p>
                         </div>
@@ -707,73 +736,78 @@ export default function BookAppointment() {
                       {editMode ? (
                         <div className="space-y-4">
                           <div className="space-y-2">
-                            <Label htmlFor="editName">Name</Label>
+                            <Label htmlFor="editName" className="text-base">Name</Label>
                             <Input
                               id="editName"
                               value={foundAppointment.customer_name}
                               onChange={(e) => setFoundAppointment({...foundAppointment, customer_name: e.target.value})}
+                              className="h-11"
                             />
                           </div>
                           <div className="space-y-2">
-                            <Label htmlFor="editEmail">Email</Label>
+                            <Label htmlFor="editEmail" className="text-base">Email</Label>
                             <Input
                               id="editEmail"
                               type="email"
                               value={foundAppointment.customer_email}
                               onChange={(e) => setFoundAppointment({...foundAppointment, customer_email: e.target.value})}
+                              className="h-11"
                             />
                           </div>
                           <div className="space-y-2">
-                            <Label htmlFor="editPhone">Phone</Label>
+                            <Label htmlFor="editPhone" className="text-base">Phone</Label>
                             <Input
                               id="editPhone"
                               type="tel"
                               value={foundAppointment.customer_phone}
                               onChange={(e) => setFoundAppointment({...foundAppointment, customer_phone: e.target.value})}
+                              className="h-11"
                             />
                           </div>
                           <div className="space-y-2">
-                            <Label htmlFor="editNotes">Notes</Label>
+                            <Label htmlFor="editNotes" className="text-base">Notes</Label>
                             <Textarea
                               id="editNotes"
                               value={foundAppointment.notes || ""}
                               onChange={(e) => setFoundAppointment({...foundAppointment, notes: e.target.value})}
+                              rows={4}
+                              className="resize-none"
                             />
                           </div>
-                          <div className="flex gap-2">
-                            <Button onClick={handleUpdateAppointment} className="flex-1 bg-accent hover:bg-accent/90">
+                          <div className="flex flex-col sm:flex-row gap-3">
+                            <Button onClick={handleUpdateAppointment} className="flex-1 bg-accent hover:bg-accent/90 h-11">
                               Save Changes
                             </Button>
-                            <Button onClick={() => setEditMode(false)} variant="outline" className="flex-1">
+                            <Button onClick={() => setEditMode(false)} variant="outline" className="flex-1 h-11">
                               Cancel
                             </Button>
                           </div>
                         </div>
                       ) : (
                         <div className="space-y-4">
-                          <div className="space-y-2">
-                            <Label>Customer Name</Label>
-                            <p>{foundAppointment.customer_name}</p>
+                          <div className="space-y-1">
+                            <Label className="text-sm text-muted-foreground">Customer Name</Label>
+                            <p className="text-base font-medium">{foundAppointment.customer_name}</p>
                           </div>
-                          <div className="space-y-2">
-                            <Label>Email</Label>
-                            <p>{foundAppointment.customer_email}</p>
+                          <div className="space-y-1">
+                            <Label className="text-sm text-muted-foreground">Email</Label>
+                            <p className="text-base font-medium break-all">{foundAppointment.customer_email}</p>
                           </div>
-                          <div className="space-y-2">
-                            <Label>Phone</Label>
-                            <p>{foundAppointment.customer_phone}</p>
+                          <div className="space-y-1">
+                            <Label className="text-sm text-muted-foreground">Phone</Label>
+                            <p className="text-base font-medium">{foundAppointment.customer_phone}</p>
                           </div>
                           {foundAppointment.notes && (
-                            <div className="space-y-2">
-                              <Label>Notes</Label>
-                              <p>{foundAppointment.notes}</p>
+                            <div className="space-y-1">
+                              <Label className="text-sm text-muted-foreground">Notes</Label>
+                              <p className="text-base">{foundAppointment.notes}</p>
                             </div>
                           )}
-                          <div className="flex gap-2">
-                            <Button onClick={() => setEditMode(true)} variant="outline" className="flex-1">
+                          <div className="flex flex-col sm:flex-row gap-3">
+                            <Button onClick={() => setEditMode(true)} variant="outline" className="flex-1 h-11">
                               Edit Appointment
                             </Button>
-                            <Button onClick={handleCancelAppointment} variant="destructive" className="flex-1">
+                            <Button onClick={handleCancelAppointment} variant="destructive" className="flex-1 h-11">
                               Cancel Appointment
                             </Button>
                           </div>
@@ -785,7 +819,7 @@ export default function BookAppointment() {
                               setLookupConfirmation("");
                             }} 
                             variant="ghost" 
-                            className="w-full"
+                            className="w-full h-11"
                           >
                             Look Up Another Appointment
                           </Button>
@@ -801,7 +835,7 @@ export default function BookAppointment() {
       </section>
 
       <footer className="bg-foreground text-background py-8">
-        <div className="container text-center space-y-2">
+        <div className="container text-center space-y-2 px-4">
           <p className="text-sm">
             © 2025 Rogova Auto Shop. All rights reserved. | 37 Veronica Dr, Halifax, NS
           </p>
