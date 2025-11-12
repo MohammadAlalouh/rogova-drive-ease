@@ -1202,13 +1202,86 @@ export default function AdminDashboard() {
                     />
                   </div>
 
-                  <Button 
-                    onClick={handleCompleteAppointment} 
-                    className="w-full"
-                    disabled={actionLoading === completingAppointment?.id}
-                  >
-                    {actionLoading === completingAppointment?.id ? "Completing..." : "Complete & Send Invoice"}
-                  </Button>
+                  <div className="border-t pt-4 space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span>Services Subtotal:</span>
+                      <span className="font-medium">
+                        ${completionData.servicesPerformed
+                          .reduce((sum, s) => sum + (parseFloat(s.cost) || 0), 0)
+                          .toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span>Items Subtotal:</span>
+                      <span className="font-medium">
+                        ${completionData.itemsPurchased
+                          .reduce((sum, i) => sum + (parseFloat(i.cost) || 0), 0)
+                          .toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span>Taxes ({completionData.taxRate}%):</span>
+                      <span className="font-medium">
+                        ${(
+                          completionData.servicesPerformed
+                            .reduce((sum, s) => sum + (parseFloat(s.cost) || 0), 0) *
+                          ((parseFloat(completionData.taxRate) || 0) / 100)
+                        ).toFixed(2)}
+                      </span>
+                    </div>
+                    {parseFloat(completionData.discount) > 0 && (
+                      <div className="flex justify-between text-sm text-green-600">
+                        <span>Discount:</span>
+                        <span className="font-medium">
+                          -${parseFloat(completionData.discount).toFixed(2)}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-base font-bold border-t pt-2">
+                      <span>Total:</span>
+                      <span>
+                        ${(
+                          completionData.servicesPerformed
+                            .reduce((sum, s) => sum + (parseFloat(s.cost) || 0), 0) +
+                          completionData.itemsPurchased
+                            .reduce((sum, i) => sum + (parseFloat(i.cost) || 0), 0) +
+                          (completionData.servicesPerformed
+                            .reduce((sum, s) => sum + (parseFloat(s.cost) || 0), 0) *
+                            ((parseFloat(completionData.taxRate) || 0) / 100)) -
+                          (parseFloat(completionData.discount) || 0)
+                        ).toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button 
+                      onClick={handleCompleteAppointment} 
+                      className="flex-1"
+                      disabled={actionLoading === completingAppointment?.id}
+                    >
+                      {actionLoading === completingAppointment?.id ? "Completing..." : "Complete & Send Invoice"}
+                    </Button>
+                    <Button 
+                      variant="outline"
+                      onClick={() => {
+                        setCompletionDialogOpen(false);
+                        setCompletingAppointment(null);
+                        setCompletionData({
+                          servicesPerformed: [],
+                          itemsPurchased: [],
+                          selectedStaff: [],
+                          hoursWorked: "",
+                          taxRate: "14",
+                          discount: "",
+                          notes: "",
+                          paymentMethod: "cash"
+                        });
+                      }}
+                    >
+                      Close
+                    </Button>
+                  </div>
                 </div>
               </DialogContent>
             </Dialog>
