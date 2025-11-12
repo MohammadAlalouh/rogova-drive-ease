@@ -366,6 +366,16 @@ export default function BookAppointment() {
   const handleCancelAppointment = async () => {
     if (!foundAppointment) return;
 
+    // Prevent cancellation of in-progress or completed appointments
+    if (foundAppointment.status === 'in_progress' || foundAppointment.status === 'complete') {
+      toast({
+        title: "Cannot cancel appointment",
+        description: `Appointments that are ${foundAppointment.status === 'in_progress' ? 'in progress' : 'completed'} cannot be cancelled. Please contact us for assistance.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       const { error } = await supabase
         .from('appointments')
@@ -699,9 +709,19 @@ export default function BookAppointment() {
                               <p className="text-base">{foundAppointment.notes}</p>
                             </div>
                           )}
-                          <Button onClick={handleCancelAppointment} variant="destructive" className="w-full h-11">
-                            Cancel Appointment
-                          </Button>
+                          {foundAppointment.status !== 'in_progress' && foundAppointment.status !== 'complete' && foundAppointment.status !== 'cancelled' ? (
+                            <Button onClick={handleCancelAppointment} variant="destructive" className="w-full h-11">
+                              Cancel Appointment
+                            </Button>
+                          ) : foundAppointment.status === 'cancelled' ? (
+                            <div className="p-3 bg-destructive/10 text-destructive rounded-lg text-center text-sm">
+                              This appointment has been cancelled
+                            </div>
+                          ) : (
+                            <div className="p-3 bg-muted rounded-lg text-center text-sm">
+                              This appointment is {foundAppointment.status === 'in_progress' ? 'in progress' : 'completed'} and cannot be cancelled. Please contact us for assistance.
+                            </div>
+                          )}
                           <Button 
                             onClick={() => {
                               setFoundAppointment(null);
