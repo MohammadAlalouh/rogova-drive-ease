@@ -51,6 +51,7 @@ export default function BookAppointment() {
   const [lookupConfirmation, setLookupConfirmation] = useState("");
   const [foundAppointment, setFoundAppointment] = useState<any>(null);
   const [lookingUp, setLookingUp] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -367,7 +368,7 @@ export default function BookAppointment() {
   };
 
   const handleCancelAppointment = async () => {
-    if (!foundAppointment) return;
+    if (!foundAppointment || cancelling) return;
 
     // Prevent cancellation of in-progress or completed appointments
     if (foundAppointment.status === 'in_progress' || foundAppointment.status === 'complete') {
@@ -379,6 +380,7 @@ export default function BookAppointment() {
       return;
     }
 
+    setCancelling(true);
     try {
       const { error } = await supabase
         .from('appointments')
@@ -422,6 +424,8 @@ export default function BookAppointment() {
         description: error.message,
         variant: "destructive",
       });
+    } finally {
+      setCancelling(false);
     }
   };
 
@@ -716,8 +720,13 @@ export default function BookAppointment() {
                             </div>
                           )}
                           {foundAppointment.status !== 'in_progress' && foundAppointment.status !== 'complete' && foundAppointment.status !== 'cancelled' ? (
-                            <Button onClick={handleCancelAppointment} variant="destructive" className="w-full h-11">
-                              Cancel Appointment
+                            <Button 
+                              onClick={handleCancelAppointment} 
+                              variant="destructive" 
+                              className="w-full h-11"
+                              disabled={cancelling}
+                            >
+                              {cancelling ? "Cancelling..." : "Cancel Appointment"}
                             </Button>
                           ) : foundAppointment.status === 'cancelled' ? (
                             <div className="p-3 bg-destructive/10 text-destructive rounded-lg text-center text-sm">
