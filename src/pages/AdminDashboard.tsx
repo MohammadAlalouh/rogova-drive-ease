@@ -10,9 +10,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { LogOut, Edit, Trash2, CheckCircle, PlayCircle } from "lucide-react";
+import { LogOut, Edit, Trash2, CheckCircle, PlayCircle, X, Plus } from "lucide-react";
 
 interface Appointment {
   id: string;
@@ -30,6 +32,10 @@ interface Appointment {
 interface Service {
   id: string;
   name: string;
+  description: string;
+  price_range: string;
+  duration_minutes: number;
+  is_active: boolean;
 }
 
 export default function AdminDashboard() {
@@ -39,6 +45,16 @@ export default function AdminDashboard() {
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
   const [editDate, setEditDate] = useState<Date>();
   const [editTime, setEditTime] = useState("");
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingService, setEditingService] = useState<Service | null>(null);
+  const [serviceDialogOpen, setServiceDialogOpen] = useState(false);
+  const [newService, setNewService] = useState({
+    name: "",
+    description: "",
+    price_range: "",
+    duration_minutes: 60
+  });
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -83,7 +99,7 @@ export default function AdminDashboard() {
           .order('appointment_time', { ascending: true }),
         supabase
           .from('services')
-          .select('id, name')
+          .select('*')
       ]);
 
       if (appointmentsRes.error) throw appointmentsRes.error;
@@ -115,6 +131,9 @@ export default function AdminDashboard() {
   };
 
   const handleUpdateStatus = async (appointment: Appointment, newStatus: 'in_progress' | 'complete' | 'cancelled') => {
+    if (actionLoading) return;
+    setActionLoading(appointment.id);
+    
     try {
       const { error } = await supabase
         .from('appointments')
@@ -151,11 +170,14 @@ export default function AdminDashboard() {
         description: error.message,
         variant: "destructive",
       });
+    } finally {
+      setActionLoading(null);
     }
   };
 
   const handleEdit = async () => {
-    if (!editingAppointment || !editDate || !editTime) return;
+    if (!editingAppointment || !editDate || !editTime || actionLoading) return;
+    setActionLoading(editingAppointment.id);
 
     try {
       const { error } = await supabase
@@ -168,30 +190,29 @@ export default function AdminDashboard() {
 
       if (error) throw error;
 
-      // Send update email to customer and admin
+      // Send update email
       const serviceNames = getServiceNames(editingAppointment.service_ids).split(', ');
       
-      await Promise.all([
-        supabase.functions.invoke('send-appointment-email', {
-          body: {
-            to: editingAppointment.customer_email,
-            customerName: editingAppointment.customer_name,
-            confirmationNumber: editingAppointment.confirmation_number,
-            appointmentDate: editDate.toLocaleDateString(),
-            appointmentTime: editTime,
-            services: serviceNames,
-            action: 'update',
-            notes: editingAppointment.notes
-          }
-        })
-      ]);
+      await supabase.functions.invoke('send-appointment-email', {
+        body: {
+          to: editingAppointment.customer_email,
+          customerName: editingAppointment.customer_name,
+          confirmationNumber: editingAppointment.confirmation_number,
+          appointmentDate: editDate.toLocaleDateString(),
+          appointmentTime: editTime,
+          services: serviceNames,
+          action: 'update',
+          notes: editingAppointment.notes
+        }
+      });
 
       toast({
         title: "Appointment updated",
-        description: "Confirmation emails sent",
+        description: "Confirmation email sent",
       });
 
       setEditingAppointment(null);
+      setDialogOpen(false);
       fetchData();
     } catch (error: any) {
       toast({
@@ -199,11 +220,15 @@ export default function AdminDashboard() {
         description: error.message,
         variant: "destructive",
       });
+    } finally {
+      setActionLoading(null);
     }
   };
 
   const handleCancel = async (appointment: Appointment) => {
     if (!confirm("Are you sure you want to cancel this appointment?")) return;
+    if (actionLoading) return;
+    setActionLoading(appointment.id);
 
     try {
       const { error } = await supabase
@@ -241,6 +266,112 @@ export default function AdminDashboard() {
         description: error.message,
         variant: "destructive",
       });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleDelete = async (appointment: Appointment) => {
+    if (!confirm("Are you sure you want to permanently delete this appointment? This cannot be undone.")) return;
+    if (actionLoading) return;
+    setActionLoading(appointment.id);
+
+    try {
+      const { error } = await supabase
+        .from('appointments')
+        .delete()
+        .eq('id', appointment.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Appointment deleted",
+        description: "Appointment permanently removed",
+      });
+
+      fetchData();
+    } catch (error: any) {
+      toast({
+        title: "Error deleting appointment",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleSaveService = async () => {
+    if (actionLoading) return;
+    setActionLoading("service");
+
+    try {
+      if (editingService) {
+        const { error } = await supabase
+          .from('services')
+          .update({
+            name: newService.name,
+            description: newService.description,
+            price_range: newService.price_range,
+            duration_minutes: newService.duration_minutes
+          })
+          .eq('id', editingService.id);
+
+        if (error) throw error;
+        toast({ title: "Service updated" });
+      } else {
+        const { error } = await supabase
+          .from('services')
+          .insert({
+            name: newService.name,
+            description: newService.description,
+            price_range: newService.price_range,
+            duration_minutes: newService.duration_minutes,
+            is_active: true
+          });
+
+        if (error) throw error;
+        toast({ title: "Service added" });
+      }
+
+      setServiceDialogOpen(false);
+      setEditingService(null);
+      setNewService({ name: "", description: "", price_range: "", duration_minutes: 60 });
+      fetchData();
+    } catch (error: any) {
+      toast({
+        title: "Error saving service",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleDeleteService = async (serviceId: string) => {
+    if (!confirm("Are you sure you want to delete this service?")) return;
+    if (actionLoading) return;
+    setActionLoading(serviceId);
+
+    try {
+      const { error } = await supabase
+        .from('services')
+        .delete()
+        .eq('id', serviceId);
+
+      if (error) throw error;
+
+      toast({ title: "Service deleted" });
+      fetchData();
+    } catch (error: any) {
+      toast({
+        title: "Error deleting service",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setActionLoading(null);
     }
   };
 
@@ -273,11 +404,18 @@ export default function AdminDashboard() {
             </Button>
           </div>
 
-          <Card className="shadow-strong">
-            <CardHeader>
-              <CardTitle>All Appointments</CardTitle>
-            </CardHeader>
-            <CardContent>
+          <Tabs defaultValue="appointments" className="space-y-6">
+            <TabsList>
+              <TabsTrigger value="appointments">Appointments</TabsTrigger>
+              <TabsTrigger value="services">Services</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="appointments">
+              <Card className="shadow-strong">
+                <CardHeader>
+                  <CardTitle>All Appointments</CardTitle>
+                </CardHeader>
+                <CardContent>
               {loading ? (
                 <p>Loading appointments...</p>
               ) : appointments.length === 0 ? (
@@ -320,66 +458,75 @@ export default function AdminDashboard() {
                           <TableCell>{getServiceNames(appointment.service_ids)}</TableCell>
                           <TableCell>{getStatusBadge(appointment.status)}</TableCell>
                           <TableCell>
-                            <div className="flex gap-2">
-                              <Dialog>
-                                <DialogTrigger asChild>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => {
-                                      setEditingAppointment(appointment);
-                                      setEditDate(new Date(appointment.appointment_date));
-                                      setEditTime(appointment.appointment_time);
-                                    }}
-                                  >
-                                    <Edit className="h-4 w-4" />
-                                  </Button>
-                                </DialogTrigger>
-                                <DialogContent>
-                                  <DialogHeader>
-                                    <DialogTitle>Edit Appointment</DialogTitle>
-                                    <DialogDescription>
-                                      Update the date and time for this appointment
-                                    </DialogDescription>
-                                  </DialogHeader>
-                                  <div className="space-y-4">
-                                    <div>
-                                      <Label>Select New Date</Label>
-                                      <Calendar
-                                        mode="single"
-                                        selected={editDate}
-                                        onSelect={setEditDate}
-                                        disabled={(date) => date < new Date()}
-                                        className="rounded-md border p-3 pointer-events-auto"
-                                      />
-                                    </div>
-                                    <div>
-                                      <Label>Select New Time</Label>
-                                      <Select value={editTime} onValueChange={setEditTime}>
-                                        <SelectTrigger>
-                                          <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          {timeSlots.map((slot) => (
-                                            <SelectItem key={slot} value={slot}>
-                                              {slot}
-                                            </SelectItem>
-                                          ))}
-                                        </SelectContent>
-                                      </Select>
-                                    </div>
-                                    <Button onClick={handleEdit} className="w-full">
-                                      Update Appointment
+                            <div className="flex gap-2 flex-wrap">
+                              {appointment.status !== 'complete' && appointment.status !== 'cancelled' && (
+                                <Dialog open={dialogOpen && editingAppointment?.id === appointment.id} onOpenChange={(open) => {
+                                  setDialogOpen(open);
+                                  if (!open) setEditingAppointment(null);
+                                }}>
+                                  <DialogTrigger asChild>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      disabled={actionLoading === appointment.id}
+                                      onClick={() => {
+                                        setEditingAppointment(appointment);
+                                        setEditDate(new Date(appointment.appointment_date));
+                                        setEditTime(appointment.appointment_time);
+                                        setDialogOpen(true);
+                                      }}
+                                    >
+                                      <Edit className="h-4 w-4" />
                                     </Button>
-                                  </div>
-                                </DialogContent>
-                              </Dialog>
+                                  </DialogTrigger>
+                                  <DialogContent>
+                                    <DialogHeader>
+                                      <DialogTitle>Edit Appointment</DialogTitle>
+                                      <DialogDescription>
+                                        Update the date and time for this appointment
+                                      </DialogDescription>
+                                    </DialogHeader>
+                                    <div className="space-y-4">
+                                      <div>
+                                        <Label>Select New Date</Label>
+                                        <Calendar
+                                          mode="single"
+                                          selected={editDate}
+                                          onSelect={setEditDate}
+                                          disabled={(date) => date < new Date()}
+                                          className="rounded-md border p-3"
+                                        />
+                                      </div>
+                                      <div>
+                                        <Label>Select New Time</Label>
+                                        <Select value={editTime} onValueChange={setEditTime}>
+                                          <SelectTrigger>
+                                            <SelectValue />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            {timeSlots.map((slot) => (
+                                              <SelectItem key={slot} value={slot}>
+                                                {slot}
+                                              </SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                      <Button onClick={handleEdit} className="w-full" disabled={actionLoading === appointment.id}>
+                                        {actionLoading === appointment.id ? "Updating..." : "Update Appointment"}
+                                      </Button>
+                                    </div>
+                                  </DialogContent>
+                                </Dialog>
+                              )}
 
                               {appointment.status === 'pending' && (
                                 <Button
                                   size="sm"
-                                  variant="outline"
+                                  variant="secondary"
+                                  disabled={actionLoading === appointment.id}
                                   onClick={() => handleUpdateStatus(appointment, 'in_progress')}
+                                  title="Start Progress"
                                 >
                                   <PlayCircle className="h-4 w-4" />
                                 </Button>
@@ -388,8 +535,10 @@ export default function AdminDashboard() {
                               {appointment.status === 'in_progress' && (
                                 <Button
                                   size="sm"
-                                  variant="outline"
+                                  variant="default"
+                                  disabled={actionLoading === appointment.id}
                                   onClick={() => handleUpdateStatus(appointment, 'complete')}
+                                  title="Mark Complete"
                                 >
                                   <CheckCircle className="h-4 w-4" />
                                 </Button>
@@ -398,12 +547,24 @@ export default function AdminDashboard() {
                               {appointment.status !== 'cancelled' && appointment.status !== 'complete' && (
                                 <Button
                                   size="sm"
-                                  variant="destructive"
+                                  variant="outline"
+                                  disabled={actionLoading === appointment.id}
                                   onClick={() => handleCancel(appointment)}
+                                  title="Cancel"
                                 >
-                                  <Trash2 className="h-4 w-4" />
+                                  <X className="h-4 w-4" />
                                 </Button>
                               )}
+
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                disabled={actionLoading === appointment.id}
+                                onClick={() => handleDelete(appointment)}
+                                title="Delete Permanently"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
                             </div>
                           </TableCell>
                         </TableRow>
@@ -414,6 +575,129 @@ export default function AdminDashboard() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="services">
+          <Card className="shadow-strong">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle>Services Management</CardTitle>
+              <Dialog open={serviceDialogOpen} onOpenChange={setServiceDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button onClick={() => {
+                    setEditingService(null);
+                    setNewService({ name: "", description: "", price_range: "", duration_minutes: 60 });
+                  }}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add Service
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>{editingService ? "Edit Service" : "Add New Service"}</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div>
+                      <Label>Service Name</Label>
+                      <Input
+                        value={newService.name}
+                        onChange={(e) => setNewService({ ...newService, name: e.target.value })}
+                        placeholder="e.g., Oil Change"
+                      />
+                    </div>
+                    <div>
+                      <Label>Description</Label>
+                      <Textarea
+                        value={newService.description}
+                        onChange={(e) => setNewService({ ...newService, description: e.target.value })}
+                        placeholder="Describe the service..."
+                      />
+                    </div>
+                    <div>
+                      <Label>Price Range</Label>
+                      <Input
+                        value={newService.price_range}
+                        onChange={(e) => setNewService({ ...newService, price_range: e.target.value })}
+                        placeholder="e.g., $50-$80"
+                      />
+                    </div>
+                    <div>
+                      <Label>Duration (minutes)</Label>
+                      <Input
+                        type="number"
+                        value={newService.duration_minutes}
+                        onChange={(e) => setNewService({ ...newService, duration_minutes: parseInt(e.target.value) })}
+                      />
+                    </div>
+                    <Button onClick={handleSaveService} className="w-full" disabled={actionLoading === "service"}>
+                      {actionLoading === "service" ? "Saving..." : (editingService ? "Update Service" : "Add Service")}
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <p>Loading services...</p>
+              ) : services.length === 0 ? (
+                <p className="text-muted-foreground">No services found</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Description</TableHead>
+                        <TableHead>Price Range</TableHead>
+                        <TableHead>Duration</TableHead>
+                        <TableHead>Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {services.map((service) => (
+                        <TableRow key={service.id}>
+                          <TableCell className="font-medium">{service.name}</TableCell>
+                          <TableCell>{service.description}</TableCell>
+                          <TableCell>{service.price_range}</TableCell>
+                          <TableCell>{service.duration_minutes} min</TableCell>
+                          <TableCell>
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={actionLoading === service.id}
+                                onClick={() => {
+                                  setEditingService(service);
+                                  setNewService({
+                                    name: service.name,
+                                    description: service.description,
+                                    price_range: service.price_range,
+                                    duration_minutes: service.duration_minutes
+                                  });
+                                  setServiceDialogOpen(true);
+                                }}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                disabled={actionLoading === service.id}
+                                onClick={() => handleDeleteService(service.id)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
         </div>
       </section>
 

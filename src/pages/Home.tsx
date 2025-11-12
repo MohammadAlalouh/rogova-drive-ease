@@ -93,10 +93,15 @@ export default function Home() {
 
       {/* Footer */}
       <footer className="bg-foreground text-background py-8">
-        <div className="container text-center">
+        <div className="container text-center space-y-2">
           <p className="text-sm">
             © 2025 Rogova Auto Shop. All rights reserved. | 37 Veronica Dr, Halifax, NS
           </p>
+          <Link to="/admin/login" className="block">
+            <button className="text-sm text-background/70 hover:text-background underline">
+              ADMIN LOG IN
+            </button>
+          </Link>
         </div>
       </footer>
     </div>
