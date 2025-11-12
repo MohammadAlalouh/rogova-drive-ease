@@ -151,7 +151,7 @@ export default function BookAppointment() {
       if (confError) throw confError;
 
       // Create appointment
-      const { data: appointment, error: appointmentError } = await supabase
+      const { error: appointmentError } = await supabase
         .from('appointments')
         .insert({
           confirmation_number: confData,
@@ -163,9 +163,7 @@ export default function BookAppointment() {
           service_ids: selectedServices,
           notes: validation.notes || null,
           status: 'pending'
-        })
-        .select()
-        .single();
+        });
 
       if (appointmentError) throw appointmentError;
 
