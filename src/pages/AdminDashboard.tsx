@@ -721,48 +721,50 @@ export default function AdminDashboard() {
     <div className="min-h-screen bg-background">
       <Navigation />
       
-      <section className="py-20">
-        <div className="container">
-          <div className="flex justify-between items-center mb-8">
-            <h1 className="text-4xl font-bold">Admin Dashboard</h1>
-            <Button variant="outline" onClick={handleLogout}>
-              <LogOut className="mr-2 h-4 w-4" />
-              Logout
+      <section className="py-6 md:py-20">
+        <div className="container px-4">
+          <div className="flex justify-between items-center mb-6 md:mb-8">
+            <h1 className="text-2xl md:text-4xl font-bold">Admin Dashboard</h1>
+            <Button variant="outline" onClick={handleLogout} size="sm">
+              <LogOut className="mr-0 md:mr-2 h-4 w-4" />
+              <span className="hidden sm:inline">Logout</span>
             </Button>
           </div>
 
           <Tabs defaultValue="appointments" className="space-y-6">
-            <TabsList>
-              <TabsTrigger value="appointments">Appointments</TabsTrigger>
-              <TabsTrigger value="services">Services</TabsTrigger>
-              <TabsTrigger value="staff">Staff</TabsTrigger>
-              <TabsTrigger value="completed">Completed Services</TabsTrigger>
+            <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 h-auto gap-2 p-1">
+              <TabsTrigger value="appointments" className="text-xs sm:text-sm">Appointments</TabsTrigger>
+              <TabsTrigger value="services" className="text-xs sm:text-sm">Services</TabsTrigger>
+              <TabsTrigger value="staff" className="text-xs sm:text-sm">Staff</TabsTrigger>
+              <TabsTrigger value="completed" className="text-xs sm:text-sm">Completed</TabsTrigger>
             </TabsList>
 
             <TabsContent value="appointments">
               <Card className="shadow-strong">
                 <CardHeader>
-                  <CardTitle>All Appointments</CardTitle>
+                  <CardTitle className="text-lg md:text-xl">All Appointments</CardTitle>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="px-2 md:px-6">
               {loading ? (
                 <p>Loading appointments...</p>
               ) : appointments.length === 0 ? (
                 <p className="text-muted-foreground">No appointments found</p>
               ) : (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Confirmation #</TableHead>
-                        <TableHead>Customer</TableHead>
-                        <TableHead>Contact</TableHead>
-                        <TableHead>Date & Time</TableHead>
-                        <TableHead>Services</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
+                <div className="overflow-x-auto -mx-2 md:mx-0">
+                  <div className="inline-block min-w-full align-middle">
+                    <div className="overflow-hidden">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="min-w-[120px]">Confirmation #</TableHead>
+                            <TableHead className="min-w-[120px]">Customer</TableHead>
+                            <TableHead className="min-w-[150px]">Contact</TableHead>
+                            <TableHead className="min-w-[120px]">Date & Time</TableHead>
+                            <TableHead className="min-w-[150px]">Services</TableHead>
+                            <TableHead className="min-w-[100px]">Status</TableHead>
+                            <TableHead className="min-w-[180px]">Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
                     <TableBody>
                       {appointments.map((appointment) => (
                         <TableRow key={appointment.id}>
@@ -808,13 +810,13 @@ export default function AdminDashboard() {
                                       <Edit className="h-4 w-4" />
                                     </Button>
                                   </DialogTrigger>
-                                  <DialogContent>
-                                    <DialogHeader>
-                                      <DialogTitle>Edit Appointment</DialogTitle>
-                                      <DialogDescription>
-                                        Update the date and time for this appointment
-                                      </DialogDescription>
-                                    </DialogHeader>
+                                   <DialogContent className="max-w-[95vw] md:max-w-[500px]">
+                                     <DialogHeader>
+                                       <DialogTitle className="text-lg">Edit Appointment</DialogTitle>
+                                       <DialogDescription className="text-sm">
+                                         Update the date and time for this appointment
+                                       </DialogDescription>
+                                     </DialogHeader>
                                     <div className="space-y-4">
                                       <div>
                                         <Label>Select New Date</Label>
@@ -891,13 +893,13 @@ export default function AdminDashboard() {
                                       <CheckCircle className="h-4 w-4" />
                                     </Button>
                                   </DialogTrigger>
-                                  <DialogContent className="max-h-[80vh] overflow-y-auto">
-                                    <DialogHeader>
-                                      <DialogTitle>Complete Appointment</DialogTitle>
-                                      <DialogDescription>
-                                        Add service details and final payment (all fields optional)
-                                      </DialogDescription>
-                                    </DialogHeader>
+                                   <DialogContent className="max-h-[90vh] max-w-[95vw] md:max-w-[600px] overflow-y-auto">
+                                     <DialogHeader>
+                                       <DialogTitle className="text-lg">Complete Appointment</DialogTitle>
+                                       <DialogDescription className="text-sm">
+                                         Add service details and final payment (all fields optional)
+                                       </DialogDescription>
+                                     </DialogHeader>
                                     <div className="space-y-4">
                                       <div>
                                         <Label>Services Performed</Label>
@@ -1133,8 +1135,10 @@ export default function AdminDashboard() {
                         </TableRow>
                       ))}
                     </TableBody>
-                  </Table>
+                    </Table>
+                  </div>
                 </div>
+              </div>
               )}
             </CardContent>
           </Card>
@@ -1142,33 +1146,36 @@ export default function AdminDashboard() {
 
         <TabsContent value="completed">
           <Card className="shadow-strong">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Completed Services</CardTitle>
-              <Button onClick={exportToCSV} disabled={completedServices.length === 0}>
+            <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-2 sm:space-y-0">
+              <CardTitle className="text-lg md:text-xl">Completed Services</CardTitle>
+              <Button onClick={exportToCSV} disabled={completedServices.length === 0} size="sm">
                 <Download className="mr-2 h-4 w-4" />
-                Export to CSV
+                <span className="hidden sm:inline">Export to CSV</span>
+                <span className="sm:hidden">Export</span>
               </Button>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-2 md:px-6">
               {loading ? (
                 <p>Loading completed services...</p>
               ) : completedServices.length === 0 ? (
                 <p className="text-muted-foreground">No completed services found</p>
               ) : (
-                <div className="overflow-x-auto">
-                   <Table>
-                     <TableHeader>
-                       <TableRow>
-                         <TableHead>Date</TableHead>
-                         <TableHead>Confirmation #</TableHead>
-                         <TableHead>Customer</TableHead>
-                         <TableHead>Services</TableHead>
-                         <TableHead>Items</TableHead>
-                         <TableHead>Staff</TableHead>
-                         <TableHead>Hours</TableHead>
-                         <TableHead>Total</TableHead>
-                       </TableRow>
-                     </TableHeader>
+                <div className="overflow-x-auto -mx-2 md:mx-0">
+                  <div className="inline-block min-w-full align-middle">
+                    <div className="overflow-hidden">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="min-w-[100px]">Date</TableHead>
+                            <TableHead className="min-w-[120px]">Confirmation #</TableHead>
+                            <TableHead className="min-w-[120px]">Customer</TableHead>
+                            <TableHead className="min-w-[150px]">Services</TableHead>
+                            <TableHead className="min-w-[120px]">Items</TableHead>
+                            <TableHead className="min-w-[100px]">Staff</TableHead>
+                            <TableHead className="min-w-[80px]">Hours</TableHead>
+                            <TableHead className="min-w-[100px]">Total</TableHead>
+                          </TableRow>
+                        </TableHeader>
                      <TableBody>
                        {completedServices.map((cs) => {
                          const appointment = appointments.find(a => a.id === cs.appointment_id);
@@ -1202,8 +1209,10 @@ export default function AdminDashboard() {
                          );
                        })}
                      </TableBody>
-                   </Table>
+                    </Table>
+                  </div>
                 </div>
+              </div>
               )}
             </CardContent>
           </Card>
@@ -1211,21 +1220,22 @@ export default function AdminDashboard() {
 
         <TabsContent value="staff">
           <Card className="shadow-strong">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Staff Management</CardTitle>
+            <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-2 sm:space-y-0">
+              <CardTitle className="text-lg md:text-xl">Staff Management</CardTitle>
               <Dialog open={staffDialogOpen} onOpenChange={setStaffDialogOpen}>
                 <DialogTrigger asChild>
                   <Button onClick={() => {
                     setEditingStaff(null);
                     setNewStaff({ name: "", email: "", phone: "" });
-                  }}>
+                  }} size="sm">
                     <Plus className="mr-2 h-4 w-4" />
-                    Add Staff
+                    <span className="hidden sm:inline">Add Staff</span>
+                    <span className="sm:hidden">Add</span>
                   </Button>
                 </DialogTrigger>
-                <DialogContent>
+                <DialogContent className="max-w-[95vw] md:max-w-[500px]">
                   <DialogHeader>
-                    <DialogTitle>{editingStaff ? "Edit Staff" : "Add New Staff"}</DialogTitle>
+                    <DialogTitle className="text-lg">{editingStaff ? "Edit Staff" : "Add New Staff"}</DialogTitle>
                   </DialogHeader>
                   <div className="space-y-4">
                     <div>
@@ -1261,23 +1271,25 @@ export default function AdminDashboard() {
                 </DialogContent>
               </Dialog>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-2 md:px-6">
               {loading ? (
                 <p>Loading staff...</p>
               ) : staff.length === 0 ? (
                 <p className="text-muted-foreground">No staff found</p>
               ) : (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Email</TableHead>
-                        <TableHead>Phone</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
+                <div className="overflow-x-auto -mx-2 md:mx-0">
+                  <div className="inline-block min-w-full align-middle">
+                    <div className="overflow-hidden">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="min-w-[120px]">Name</TableHead>
+                            <TableHead className="min-w-[150px]">Email</TableHead>
+                            <TableHead className="min-w-[120px]">Phone</TableHead>
+                            <TableHead className="min-w-[80px]">Status</TableHead>
+                            <TableHead className="min-w-[120px]">Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
                     <TableBody>
                       {staff.map((s) => (
                         <TableRow key={s.id}>
@@ -1322,8 +1334,10 @@ export default function AdminDashboard() {
                         </TableRow>
                       ))}
                     </TableBody>
-                  </Table>
+                    </Table>
+                  </div>
                 </div>
+              </div>
               )}
             </CardContent>
           </Card>
@@ -1331,21 +1345,22 @@ export default function AdminDashboard() {
 
         <TabsContent value="services">
           <Card className="shadow-strong">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Services Management</CardTitle>
+            <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-2 sm:space-y-0">
+              <CardTitle className="text-lg md:text-xl">Services Management</CardTitle>
               <Dialog open={serviceDialogOpen} onOpenChange={setServiceDialogOpen}>
                 <DialogTrigger asChild>
                   <Button onClick={() => {
                     setEditingService(null);
                     setNewService({ name: "", description: "", price_range: "", duration_minutes: 60 });
-                  }}>
+                  }} size="sm">
                     <Plus className="mr-2 h-4 w-4" />
-                    Add Service
+                    <span className="hidden sm:inline">Add Service</span>
+                    <span className="sm:hidden">Add</span>
                   </Button>
                 </DialogTrigger>
-                <DialogContent>
+                <DialogContent className="max-w-[95vw] md:max-w-[500px]">
                   <DialogHeader>
-                    <DialogTitle>{editingService ? "Edit Service" : "Add New Service"}</DialogTitle>
+                    <DialogTitle className="text-lg">{editingService ? "Edit Service" : "Add New Service"}</DialogTitle>
                   </DialogHeader>
                   <div className="space-y-4">
                     <div>
@@ -1387,23 +1402,25 @@ export default function AdminDashboard() {
                 </DialogContent>
               </Dialog>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-2 md:px-6">
               {loading ? (
                 <p>Loading services...</p>
               ) : services.length === 0 ? (
                 <p className="text-muted-foreground">No services found</p>
               ) : (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Description</TableHead>
-                        <TableHead>Price Range</TableHead>
-                        <TableHead>Duration</TableHead>
-                        <TableHead>Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
+                <div className="overflow-x-auto -mx-2 md:mx-0">
+                  <div className="inline-block min-w-full align-middle">
+                    <div className="overflow-hidden">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="min-w-[150px]">Name</TableHead>
+                            <TableHead className="min-w-[200px]">Description</TableHead>
+                            <TableHead className="min-w-[100px]">Price Range</TableHead>
+                            <TableHead className="min-w-[100px]">Duration</TableHead>
+                            <TableHead className="min-w-[120px]">Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
                     <TableBody>
                       {services.map((service) => (
                         <TableRow key={service.id}>
@@ -1443,8 +1460,10 @@ export default function AdminDashboard() {
                         </TableRow>
                       ))}
                     </TableBody>
-                  </Table>
+                    </Table>
+                  </div>
                 </div>
+              </div>
               )}
             </CardContent>
           </Card>
