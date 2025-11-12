@@ -47,22 +47,40 @@ const handler = async (req: Request): Promise<Response> => {
       day: 'numeric'
     });
 
+    // Use appointment_date if available, otherwise use created_at
+    const completionDate = service.appointment_date 
+      ? new Date(service.appointment_date).toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
+        })
+      : new Date(service.created_at).toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
+        });
+
     const services = service.services_performed || [];
-    const items = service.items_used || [];
+    const items = service.items_purchased || [];
     const subtotal = service.subtotal || 0;
     const discount = service.discount || 0;
-    const tax = service.tax || 0;
+    const taxes = service.taxes || 0;
     const totalCost = service.total_cost || 0;
     const amountPaid = service.amount_received || 0;
     const remainingBalance = service.remaining_balance || 0;
     const paymentStatus = service.payment_status || 'unpaid';
     const hours = service.hours_worked || 0;
+    
+    // Build vehicle string
+    const vehicle = service.car_year && service.car_make && service.car_model
+      ? `${service.car_year} ${service.car_make} ${service.car_model}`
+      : 'N/A';
 
     const servicesHtml = services.length > 0 
       ? services.map((s: any) => `
         <tr>
-          <td style="padding: 8px; border-bottom: 1px solid #eee;">${s.name}</td>
-          <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">$${s.price?.toFixed(2) || '0.00'}</td>
+          <td style="padding: 8px; border-bottom: 1px solid #eee;">${s.service || s.name}</td>
+          <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">$${(s.cost || s.price || 0).toFixed(2)}</td>
         </tr>
       `).join('')
       : '<tr><td colspan="2" style="padding: 8px; text-align: center; color: #999;">No services</td></tr>';
@@ -70,8 +88,8 @@ const handler = async (req: Request): Promise<Response> => {
     const itemsHtml = items.length > 0
       ? items.map((item: any) => `
         <tr>
-          <td style="padding: 8px; border-bottom: 1px solid #eee;">${item.name} (x${item.quantity})</td>
-          <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">$${item.total?.toFixed(2) || '0.00'}</td>
+          <td style="padding: 8px; border-bottom: 1px solid #eee;">${item.name}</td>
+          <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">$${(item.cost || item.total || 0).toFixed(2)}</td>
         </tr>
       `).join('')
       : '<tr><td colspan="2" style="padding: 8px; text-align: center; color: #999;">No items</td></tr>';
@@ -96,9 +114,11 @@ const handler = async (req: Request): Promise<Response> => {
           <div style="background: white; padding: 30px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 10px 10px;">
             <div style="margin-bottom: 30px;">
               <p style="margin: 5px 0; color: #666;"><strong>Receipt Date:</strong> ${receiptDate}</p>
-              <p style="margin: 5px 0; color: #666;"><strong>Completion Date:</strong> ${new Date(service.completion_date).toLocaleDateString()}</p>
-              <p style="margin: 5px 0; color: #666;"><strong>Customer:</strong> ${service.customer_name}</p>
-              <p style="margin: 5px 0; color: #666;"><strong>Vehicle:</strong> ${service.customer_vehicle}</p>
+              <p style="margin: 5px 0; color: #666;"><strong>Completion Date:</strong> ${completionDate}</p>
+              <p style="margin: 5px 0; color: #666;"><strong>Customer:</strong> ${service.customer_name || 'N/A'}</p>
+              <p style="margin: 5px 0; color: #666;"><strong>Email:</strong> ${service.customer_email || 'N/A'}</p>
+              <p style="margin: 5px 0; color: #666;"><strong>Phone:</strong> ${service.customer_phone || 'N/A'}</p>
+              <p style="margin: 5px 0; color: #666;"><strong>Vehicle:</strong> ${vehicle}</p>
             </div>
 
             <div style="margin-bottom: 20px;">
@@ -130,7 +150,7 @@ const handler = async (req: Request): Promise<Response> => {
               </div>
               <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
                 <span>Tax:</span>
-                <span>$${tax.toFixed(2)}</span>
+                <span>$${taxes.toFixed(2)}</span>
               </div>
               <div style="display: flex; justify-content: space-between; margin-bottom: 15px; font-size: 18px; font-weight: bold; padding-top: 10px; border-top: 2px solid #e5e7eb;">
                 <span>Total Amount:</span>

@@ -2258,40 +2258,44 @@ export default function AdminDashboard() {
                           <div className="overflow-hidden">
                             <Table>
                                 <TableHeader>
-                                  <TableRow>
-                                    <TableHead className="min-w-[100px]">Date</TableHead>
-                                    <TableHead className="min-w-[120px]">Confirmation #</TableHead>
-                                    <TableHead className="min-w-[120px]">Customer</TableHead>
-                                    <TableHead className="min-w-[150px]">Car</TableHead>
-                                    <TableHead className="min-w-[150px]">Services</TableHead>
-                                    <TableHead className="min-w-[120px]">Items</TableHead>
-                                    <TableHead className="min-w-[100px]">Staff</TableHead>
-                                    <TableHead className="min-w-[80px]">Hours</TableHead>
-                                    <TableHead className="min-w-[100px]">Discount</TableHead>
-                                    <TableHead className="min-w-[100px]">Payment Method</TableHead>
-                                    <TableHead className="min-w-[100px]">Total</TableHead>
-                                    <TableHead className="min-w-[120px]">Pay Status</TableHead>
-                                    <TableHead className="min-w-[120px]">Amount Received</TableHead>
-                                    <TableHead className="min-w-[120px]">Balance Due</TableHead>
-                                    <TableHead className="min-w-[150px]">Notes</TableHead>
-                                    <TableHead className="min-w-[100px]">Actions</TableHead>
-                                  </TableRow>
+                                   <TableRow>
+                                     <TableHead className="min-w-[100px]">Date</TableHead>
+                                     <TableHead className="min-w-[120px]">Confirmation #</TableHead>
+                                     <TableHead className="min-w-[120px]">Customer</TableHead>
+                                     <TableHead className="min-w-[150px]">Email</TableHead>
+                                     <TableHead className="min-w-[120px]">Phone</TableHead>
+                                     <TableHead className="min-w-[150px]">Car</TableHead>
+                                     <TableHead className="min-w-[150px]">Services</TableHead>
+                                     <TableHead className="min-w-[120px]">Items</TableHead>
+                                     <TableHead className="min-w-[100px]">Staff</TableHead>
+                                     <TableHead className="min-w-[80px]">Hours</TableHead>
+                                     <TableHead className="min-w-[100px]">Discount</TableHead>
+                                     <TableHead className="min-w-[100px]">Payment Method</TableHead>
+                                     <TableHead className="min-w-[100px]">Total</TableHead>
+                                     <TableHead className="min-w-[120px]">Pay Status</TableHead>
+                                     <TableHead className="min-w-[120px]">Amount Received</TableHead>
+                                     <TableHead className="min-w-[120px]">Balance Due</TableHead>
+                                     <TableHead className="min-w-[150px]">Notes</TableHead>
+                                     <TableHead className="min-w-[150px]">Actions</TableHead>
+                                   </TableRow>
                                 </TableHeader>
                                <TableBody>
                                 {services.map((cs) => {
                                   const isEditable = !cs.is_record_complete;
                                   return (
                                     <TableRow key={cs.id} className={cs.is_record_complete ? "bg-muted/30" : ""}>
-                                      <TableCell>
-                                        {cs.appointment_date ? new Date(cs.appointment_date).toLocaleDateString() : new Date(cs.created_at).toLocaleDateString()}
-                                      </TableCell>
-                                      <TableCell className="font-mono text-xs">
-                                        {cs.confirmation_number || 'N/A'}
-                                      </TableCell>
-                                      <TableCell>{cs.customer_name || 'N/A'}</TableCell>
-                                      <TableCell className="text-sm">
-                                        {cs.car_year && cs.car_make && cs.car_model ? `${cs.car_year} ${cs.car_make} ${cs.car_model}` : 'N/A'}
-                                      </TableCell>
+                                       <TableCell>
+                                         {cs.appointment_date ? new Date(cs.appointment_date).toLocaleDateString() : new Date(cs.created_at).toLocaleDateString()}
+                                       </TableCell>
+                                       <TableCell className="font-mono text-xs">
+                                         {cs.confirmation_number || 'N/A'}
+                                       </TableCell>
+                                       <TableCell>{cs.customer_name || 'N/A'}</TableCell>
+                                       <TableCell className="text-sm">{cs.customer_email || 'N/A'}</TableCell>
+                                       <TableCell className="text-sm">{cs.customer_phone || 'N/A'}</TableCell>
+                                       <TableCell className="text-sm">
+                                         {cs.car_year && cs.car_make && cs.car_model ? `${cs.car_year} ${cs.car_make} ${cs.car_model}` : 'N/A'}
+                                       </TableCell>
                                       <TableCell>
                                         {cs.services_performed.map((s: any) => (
                                           <div key={s.service} className="text-sm">
@@ -2690,8 +2694,10 @@ export default function AdminDashboard() {
                 <h3 className="font-semibold mb-3">Receipt Preview</h3>
                 <div className="space-y-2 text-sm">
                   <p><strong>Customer:</strong> {receiptDialog.service.customer_name}</p>
+                  <p><strong>Email:</strong> {receiptDialog.service.customer_email}</p>
+                  <p><strong>Phone:</strong> {receiptDialog.service.customer_phone}</p>
                   <p><strong>Vehicle:</strong> {receiptDialog.service.car_year} {receiptDialog.service.car_make} {receiptDialog.service.car_model}</p>
-                  <p><strong>Completion Date:</strong> {new Date(receiptDialog.service.created_at).toLocaleDateString()}</p>
+                  <p><strong>Completion Date:</strong> {receiptDialog.service.appointment_date ? new Date(receiptDialog.service.appointment_date).toLocaleDateString() : new Date(receiptDialog.service.created_at).toLocaleDateString()}</p>
                   <p><strong>Hours Worked:</strong> {receiptDialog.service.hours_worked}</p>
                 </div>
 
@@ -2700,8 +2706,8 @@ export default function AdminDashboard() {
                   <ul className="text-sm space-y-1">
                     {receiptDialog.service.services_performed?.map((service: any, idx: number) => (
                       <li key={idx} className="flex justify-between">
-                        <span>{service.service}</span>
-                        <span>${service.cost?.toFixed(2)}</span>
+                        <span>{service.service || service.name}</span>
+                        <span>${(service.cost || service.price || 0).toFixed(2)}</span>
                       </li>
                     ))}
                   </ul>
@@ -2713,7 +2719,7 @@ export default function AdminDashboard() {
                     {receiptDialog.service.items_purchased?.map((item: any, idx: number) => (
                       <li key={idx} className="flex justify-between">
                         <span>{item.name}</span>
-                        <span>${item.cost?.toFixed(2)}</span>
+                        <span>${(item.cost || item.total || 0).toFixed(2)}</span>
                       </li>
                     ))}
                   </ul>
