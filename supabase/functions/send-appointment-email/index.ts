@@ -16,6 +16,9 @@ const appointmentEmailSchema = z.object({
   appointmentDate: z.string(),
   appointmentTime: z.string(),
   services: z.array(z.string()).min(1),
+  carMake: z.string().optional(),
+  carModel: z.string().optional(),
+  carYear: z.number().optional(),
   action: z.enum(['booking', 'update', 'cancel', 'in_progress', 'complete']),
   notes: z.string().max(1000).optional(),
   invoice: z.object({
@@ -119,7 +122,10 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log("Appointment verified:", appointment.id);
 
-    const { to, customerName, confirmationNumber, appointmentDate, appointmentTime, services, action, notes, invoice } = body;
+    const { to, customerName, confirmationNumber, appointmentDate, appointmentTime, services, carMake, carModel, carYear, action, notes, invoice } = body;
+
+    // Build car info string if available
+    const carInfo = carMake && carModel ? `${carYear || ''} ${carMake} ${carModel}`.trim() : '';
 
     let emailSubject = "";
     let emailContent = "";
@@ -134,6 +140,7 @@ const handler = async (req: Request): Promise<Response> => {
             <li><strong>Confirmation Number:</strong> ${confirmationNumber}</li>
             <li><strong>Date:</strong> ${appointmentDate}</li>
             <li><strong>Time:</strong> ${appointmentTime}</li>
+            ${carInfo ? `<li><strong>Vehicle:</strong> ${carInfo}</li>` : ''}
             <li><strong>Services:</strong> ${services.join(', ')}</li>
             ${notes ? `<li><strong>Notes:</strong> ${notes}</li>` : ''}
           </ul>
@@ -153,6 +160,7 @@ const handler = async (req: Request): Promise<Response> => {
             <li><strong>Confirmation Number:</strong> ${confirmationNumber}</li>
             <li><strong>New Date:</strong> ${appointmentDate}</li>
             <li><strong>New Time:</strong> ${appointmentTime}</li>
+            ${carInfo ? `<li><strong>Vehicle:</strong> ${carInfo}</li>` : ''}
             <li><strong>Services:</strong> ${services.join(', ')}</li>
             ${notes ? `<li><strong>Notes:</strong> ${notes}</li>` : ''}
           </ul>
@@ -167,7 +175,7 @@ const handler = async (req: Request): Promise<Response> => {
         emailContent = `
           <h1>Appointment Cancelled</h1>
           <p>Dear ${customerName},</p>
-          <p>Your appointment (${confirmationNumber}) scheduled for ${appointmentDate} at ${appointmentTime} has been cancelled.</p>
+          <p>Your appointment (${confirmationNumber}) for your ${carInfo || 'vehicle'} scheduled for ${appointmentDate} at ${appointmentTime} has been cancelled.</p>
           <p>If you would like to book a new appointment, please visit our website.</p>
           <p>Best regards,<br>Rogova Auto Shop Team</p>
         `;
@@ -178,9 +186,10 @@ const handler = async (req: Request): Promise<Response> => {
         emailContent = `
           <h1>Your service has started!</h1>
           <p>Dear ${customerName},</p>
-          <p>We've started working on your vehicle. Your service is currently in progress.</p>
+          <p>We've started working on your ${carInfo || 'vehicle'}. Your service is currently in progress.</p>
           <ul>
             <li><strong>Confirmation Number:</strong> ${confirmationNumber}</li>
+            ${carInfo ? `<li><strong>Vehicle:</strong> ${carInfo}</li>` : ''}
             <li><strong>Services:</strong> ${services.join(', ')}</li>
           </ul>
           <p>We'll notify you when the service is complete.</p>
@@ -248,9 +257,10 @@ const handler = async (req: Request): Promise<Response> => {
         emailContent = `
           <h1>Your vehicle is ready!</h1>
           <p>Dear ${customerName},</p>
-          <p>Great news! We've completed the service on your vehicle.</p>
+          <p>Great news! We've completed the service on your ${carInfo || 'vehicle'}.</p>
           <ul>
             <li><strong>Confirmation Number:</strong> ${confirmationNumber}</li>
+            ${carInfo ? `<li><strong>Vehicle:</strong> ${carInfo}</li>` : ''}
             <li><strong>Services:</strong> ${services.join(', ')}</li>
             ${notes ? `<li><strong>Notes:</strong> ${notes}</li>` : ''}
           </ul>

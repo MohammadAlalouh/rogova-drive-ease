@@ -244,6 +244,9 @@ export default function AdminDashboard() {
           appointmentDate: new Date(appointment.appointment_date).toLocaleDateString(),
           appointmentTime: appointment.appointment_time,
           services: serviceNames,
+          carMake: appointment.car_make,
+          carModel: appointment.car_model,
+          carYear: appointment.car_year,
           action: newStatus === 'in_progress' ? 'in_progress' : 'cancel',
           notes: appointment.notes
         }
@@ -287,11 +290,20 @@ export default function AdminDashboard() {
       const discount = parseFloat(completionData.discount) || 0;
       const totalCost = servicesSubtotal + itemsSubtotal + taxes - discount;
 
-      // Save to completed_services table
+      // Save to completed_services table with ALL appointment data copied
       const { error: completedError } = await supabase
         .from('completed_services')
         .insert({
           appointment_id: completingAppointment.id,
+          customer_name: completingAppointment.customer_name,
+          customer_email: completingAppointment.customer_email,
+          customer_phone: completingAppointment.customer_phone,
+          car_make: completingAppointment.car_make,
+          car_model: completingAppointment.car_model,
+          car_year: completingAppointment.car_year,
+          appointment_date: completingAppointment.appointment_date,
+          appointment_time: completingAppointment.appointment_time,
+          confirmation_number: completingAppointment.confirmation_number,
           services_performed: servicesPerformed as any,
           items_purchased: itemsPurchased as any,
           staff_ids: completionData.selectedStaff,
@@ -299,7 +311,7 @@ export default function AdminDashboard() {
           subtotal: servicesSubtotal + itemsSubtotal,
           taxes,
           total_cost: totalCost,
-          notes: completionData.notes || null,
+          notes: completionData.notes || completingAppointment.notes || null,
           payment_method: completionData.paymentMethod as any
         });
 
@@ -324,6 +336,9 @@ export default function AdminDashboard() {
           appointmentDate: new Date(completingAppointment.appointment_date).toLocaleDateString(),
           appointmentTime: completingAppointment.appointment_time,
           services: serviceNames,
+          carMake: completingAppointment.car_make,
+          carModel: completingAppointment.car_model,
+          carYear: completingAppointment.car_year,
           action: 'complete',
           notes: completingAppointment.notes,
           invoice: {
@@ -394,6 +409,9 @@ export default function AdminDashboard() {
           appointmentDate: editDate.toLocaleDateString(),
           appointmentTime: editTime,
           services: serviceNames,
+          carMake: editingAppointment.car_make,
+          carModel: editingAppointment.car_model,
+          carYear: editingAppointment.car_year,
           action: 'update',
           notes: editingAppointment.notes
         }
@@ -442,6 +460,9 @@ export default function AdminDashboard() {
           appointmentDate: new Date(appointment.appointment_date).toLocaleDateString(),
           appointmentTime: appointment.appointment_time,
           services: serviceNames,
+          carMake: appointment.car_make,
+          carModel: appointment.car_model,
+          carYear: appointment.car_year,
           action: 'cancel',
           notes: appointment.notes
         }

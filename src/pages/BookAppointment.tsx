@@ -270,6 +270,9 @@ export default function BookAppointment() {
           appointmentDate: date.toLocaleDateString(),
           appointmentTime: timeSlot,
           services: selectedServiceNames,
+          carMake: validation.carMake,
+          carModel: validation.carModel,
+          carYear: validation.carYear,
           action: 'booking',
           notes: validation.notes
         }
@@ -397,6 +400,9 @@ export default function BookAppointment() {
           appointmentDate: new Date(foundAppointment.appointment_date).toLocaleDateString(),
           appointmentTime: foundAppointment.appointment_time,
           services: selectedServiceNames,
+          carMake: foundAppointment.car_make,
+          carModel: foundAppointment.car_model,
+          carYear: foundAppointment.car_year,
           action: 'cancel',
         }
       });
