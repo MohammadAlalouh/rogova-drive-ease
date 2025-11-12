@@ -860,18 +860,47 @@ export default function AdminDashboard() {
       .join(', ');
   };
 
-  const updateCompletedServiceField = async (serviceId: string, field: keyof CompletedService, value: any) => {
+  const updateCompletedServiceField = async (serviceId: string, field: keyof CompletedService, value: any, totalCost?: number) => {
     try {
+      let updateData: any = { [field]: value };
+      
+      // Find the service to get total_cost if not provided
+      const service = completedServices.find(cs => cs.id === serviceId);
+      const total = totalCost || service?.total_cost || 0;
+      
+      // Auto-update logic for payment status and amount received
+      if (field === 'payment_status') {
+        if (value === 'paid') {
+          updateData.amount_received = total;
+          updateData.remaining_balance = 0;
+        } else if (value === 'unpaid') {
+          updateData.amount_received = 0;
+          updateData.remaining_balance = total;
+        }
+      } else if (field === 'amount_received') {
+        const amountReceived = parseFloat(value) || 0;
+        updateData.remaining_balance = total - amountReceived;
+        
+        if (amountReceived === 0) {
+          updateData.payment_status = 'unpaid';
+        } else if (amountReceived >= total) {
+          updateData.payment_status = 'paid';
+          updateData.remaining_balance = 0;
+        } else {
+          updateData.payment_status = 'partial paid';
+        }
+      }
+      
       const { error } = await supabase
         .from('completed_services')
-        .update({ [field]: value })
+        .update(updateData)
         .eq('id', serviceId);
 
       if (error) throw error;
 
-      // Update local state
+      // Update local state with all changes
       setCompletedServices(prev => 
-        prev.map(cs => cs.id === serviceId ? { ...cs, [field]: value } : cs)
+        prev.map(cs => cs.id === serviceId ? { ...cs, ...updateData } : cs)
       );
 
       toast({
@@ -1317,14 +1346,34 @@ export default function AdminDashboard() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <Label>Payment Status</Label>
-                      <Select value={completionData.paymentStatus} onValueChange={(value) => setCompletionData({ ...completionData, paymentStatus: value })}>
+                      <Select 
+                        value={completionData.paymentStatus} 
+                        onValueChange={(value) => {
+                          const total = (
+                            completionData.servicesPerformed.reduce((sum, s) => sum + (parseFloat(s.cost) || 0), 0) +
+                            completionData.itemsPurchased.reduce((sum, i) => sum + (parseFloat(i.cost) || 0), 0) +
+                            (completionData.servicesPerformed.reduce((sum, s) => sum + (parseFloat(s.cost) || 0), 0) *
+                              ((parseFloat(completionData.taxRate) || 0) / 100)) -
+                            (parseFloat(completionData.discount) || 0)
+                          );
+                          
+                          let newAmountReceived = completionData.amountReceived;
+                          if (value === 'paid') {
+                            newAmountReceived = total.toString();
+                          } else if (value === 'unpaid') {
+                            newAmountReceived = '0';
+                          }
+                          
+                          setCompletionData({ ...completionData, paymentStatus: value, amountReceived: newAmountReceived });
+                        }}
+                      >
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="paid">Paid</SelectItem>
                           <SelectItem value="unpaid">Unpaid</SelectItem>
-                          <SelectItem value="partially_paid">Partially Paid</SelectItem>
+                          <SelectItem value="partial paid">Partial Paid</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -1333,8 +1382,31 @@ export default function AdminDashboard() {
                       <Input
                         type="number"
                         value={completionData.amountReceived}
-                        onChange={(e) => setCompletionData({ ...completionData, amountReceived: e.target.value })}
+                        onChange={(e) => {
+                          const total = (
+                            completionData.servicesPerformed.reduce((sum, s) => sum + (parseFloat(s.cost) || 0), 0) +
+                            completionData.itemsPurchased.reduce((sum, i) => sum + (parseFloat(i.cost) || 0), 0) +
+                            (completionData.servicesPerformed.reduce((sum, s) => sum + (parseFloat(s.cost) || 0), 0) *
+                              ((parseFloat(completionData.taxRate) || 0) / 100)) -
+                            (parseFloat(completionData.discount) || 0)
+                          );
+                          
+                          const amountReceived = parseFloat(e.target.value) || 0;
+                          let newPaymentStatus = completionData.paymentStatus;
+                          
+                          if (amountReceived === 0) {
+                            newPaymentStatus = 'unpaid';
+                          } else if (amountReceived >= total) {
+                            newPaymentStatus = 'paid';
+                          } else {
+                            newPaymentStatus = 'partial paid';
+                          }
+                          
+                          setCompletionData({ ...completionData, amountReceived: e.target.value, paymentStatus: newPaymentStatus });
+                        }}
+                        className="[&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                         placeholder="0"
+                        step="0.01"
                       />
                     </div>
                   </div>
@@ -2180,7 +2252,7 @@ export default function AdminDashboard() {
                                         {isEditable ? (
                                           <Select 
                                             value={cs.payment_status} 
-                                            onValueChange={(value) => updateCompletedServiceField(cs.id, 'payment_status', value)}
+                                            onValueChange={(value) => updateCompletedServiceField(cs.id, 'payment_status', value, cs.total_cost)}
                                           >
                                             <SelectTrigger className="w-32">
                                               <SelectValue />
@@ -2188,7 +2260,7 @@ export default function AdminDashboard() {
                                             <SelectContent>
                                               <SelectItem value="paid">Paid</SelectItem>
                                               <SelectItem value="unpaid">Unpaid</SelectItem>
-                                              <SelectItem value="partially_paid">Partially Paid</SelectItem>
+                                              <SelectItem value="partial paid">Partial Paid</SelectItem>
                                             </SelectContent>
                                           </Select>
                                         ) : (
@@ -2202,13 +2274,9 @@ export default function AdminDashboard() {
                                           <Input
                                             type="number"
                                             value={cs.amount_received}
-                                            className="w-24"
-                                            onChange={(e) => updateCompletedServiceField(cs.id, 'amount_received', parseFloat(e.target.value) || 0)}
-                                            onBlur={(e) => {
-                                              const amountReceived = parseFloat(e.target.value) || 0;
-                                              const remainingBalance = cs.total_cost - amountReceived;
-                                              updateCompletedServiceField(cs.id, 'remaining_balance', remainingBalance);
-                                            }}
+                                            className="w-24 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                            onChange={(e) => updateCompletedServiceField(cs.id, 'amount_received', parseFloat(e.target.value) || 0, cs.total_cost)}
+                                            step="0.01"
                                           />
                                         ) : (
                                           <span className="font-medium">${cs.amount_received?.toFixed(2) || '0.00'}</span>
