@@ -15,6 +15,13 @@ interface AppointmentEmailRequest {
   services: string[];
   action: 'booking' | 'update' | 'cancel' | 'in_progress' | 'complete';
   notes?: string;
+  invoice?: {
+    servicesPerformed: Array<{ service: string; cost: number }>;
+    itemsPurchased?: string;
+    subtotal: number;
+    taxes: number;
+    totalCost: number;
+  };
 }
 
 const handler = async (req: Request): Promise<Response> => {
@@ -28,7 +35,7 @@ const handler = async (req: Request): Promise<Response> => {
     const body: AppointmentEmailRequest = await req.json();
     console.log("Request body received:", body);
 
-    const { to, customerName, confirmationNumber, appointmentDate, appointmentTime, services, action, notes } = body;
+    const { to, customerName, confirmationNumber, appointmentDate, appointmentTime, services, action, notes, invoice } = body;
 
     let emailSubject = "";
     let emailContent = "";
@@ -98,7 +105,36 @@ const handler = async (req: Request): Promise<Response> => {
         break;
       
       case 'complete':
-        emailSubject = "Service Complete - Rogova Auto Shop";
+        emailSubject = "Service Complete - Invoice - Rogova Auto Shop";
+        
+        let invoiceHtml = '';
+        if (invoice) {
+          const servicesHtml = invoice.servicesPerformed
+            .map(s => `<tr><td style="padding: 8px; border-bottom: 1px solid #eee;">${s.service}</td><td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">$${s.cost.toFixed(2)}</td></tr>`)
+            .join('');
+          
+          invoiceHtml = `
+            <h2>Invoice Details</h2>
+            <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+              <thead>
+                <tr style="background-color: #f5f5f5;">
+                  <th style="padding: 8px; text-align: left; border-bottom: 2px solid #ddd;">Service</th>
+                  <th style="padding: 8px; text-align: right; border-bottom: 2px solid #ddd;">Cost</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${servicesHtml}
+              </tbody>
+            </table>
+            ${invoice.itemsPurchased ? `<p><strong>Items/Parts Purchased:</strong><br>${invoice.itemsPurchased}</p>` : ''}
+            <div style="margin-top: 20px; padding: 15px; background-color: #f9f9f9; border-radius: 5px;">
+              <p style="margin: 5px 0;"><strong>Subtotal:</strong> $${invoice.subtotal.toFixed(2)}</p>
+              <p style="margin: 5px 0;"><strong>Taxes:</strong> $${invoice.taxes.toFixed(2)}</p>
+              <p style="margin: 10px 0; font-size: 1.2em; font-weight: bold;"><strong>Total:</strong> $${invoice.totalCost.toFixed(2)}</p>
+            </div>
+          `;
+        }
+        
         emailContent = `
           <h1>Your vehicle is ready!</h1>
           <p>Dear ${customerName},</p>
@@ -106,7 +142,9 @@ const handler = async (req: Request): Promise<Response> => {
           <ul>
             <li><strong>Confirmation Number:</strong> ${confirmationNumber}</li>
             <li><strong>Services:</strong> ${services.join(', ')}</li>
+            ${notes ? `<li><strong>Notes:</strong> ${notes}</li>` : ''}
           </ul>
+          ${invoiceHtml}
           <p>Your vehicle is ready for pickup at:<br><strong>37 Veronica Dr, Halifax, NS</strong></p>
           <p>Thank you for choosing Rogova Auto Shop!</p>
           <p>Best regards,<br>Rogova Auto Shop Team</p>

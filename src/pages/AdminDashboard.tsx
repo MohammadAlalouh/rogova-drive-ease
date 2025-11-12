@@ -14,7 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { LogOut, Edit, Trash2, CheckCircle, PlayCircle, X, Plus } from "lucide-react";
+import { LogOut, Edit, Trash2, CheckCircle, PlayCircle, X, Plus, Download } from "lucide-react";
 
 interface Appointment {
   id: string;
@@ -38,9 +38,22 @@ interface Service {
   is_active: boolean;
 }
 
+interface CompletedService {
+  id: string;
+  appointment_id: string;
+  services_performed: any;
+  items_purchased: string;
+  subtotal: number;
+  taxes: number;
+  total_cost: number;
+  notes: string;
+  created_at: string;
+}
+
 export default function AdminDashboard() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [services, setServices] = useState<Service[]>([]);
+  const [completedServices, setCompletedServices] = useState<CompletedService[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
   const [editDate, setEditDate] = useState<Date>();
@@ -50,6 +63,16 @@ export default function AdminDashboard() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingService, setEditingService] = useState<Service | null>(null);
   const [serviceDialogOpen, setServiceDialogOpen] = useState(false);
+  const [completionDialogOpen, setCompletionDialogOpen] = useState(false);
+  const [completingAppointment, setCompletingAppointment] = useState<Appointment | null>(null);
+  const [completionData, setCompletionData] = useState({
+    servicesPerformed: [] as Array<{ service: string; cost: string }>,
+    itemsPurchased: "",
+    subtotal: "",
+    taxes: "",
+    totalCost: "",
+    notes: ""
+  });
   const [newService, setNewService] = useState({
     name: "",
     description: "",
@@ -117,7 +140,7 @@ export default function AdminDashboard() {
 
   const fetchData = async () => {
     try {
-      const [appointmentsRes, servicesRes] = await Promise.all([
+      const [appointmentsRes, servicesRes, completedRes] = await Promise.all([
         supabase
           .from('appointments')
           .select('*')
@@ -125,14 +148,20 @@ export default function AdminDashboard() {
           .order('appointment_time', { ascending: true }),
         supabase
           .from('services')
+          .select('*'),
+        supabase
+          .from('completed_services')
           .select('*')
+          .order('created_at', { ascending: false })
       ]);
 
       if (appointmentsRes.error) throw appointmentsRes.error;
       if (servicesRes.error) throw servicesRes.error;
+      if (completedRes.error) throw completedRes.error;
 
       setAppointments(appointmentsRes.data || []);
       setServices(servicesRes.data || []);
+      setCompletedServices(completedRes.data || []);
     } catch (error: any) {
       toast({
         title: "Error loading data",
@@ -156,7 +185,7 @@ export default function AdminDashboard() {
       .join(', ');
   };
 
-  const handleUpdateStatus = async (appointment: Appointment, newStatus: 'in_progress' | 'complete' | 'cancelled') => {
+  const handleUpdateStatus = async (appointment: Appointment, newStatus: 'in_progress' | 'cancelled') => {
     if (actionLoading) return;
     setActionLoading(appointment.id);
     
@@ -179,7 +208,7 @@ export default function AdminDashboard() {
           appointmentDate: new Date(appointment.appointment_date).toLocaleDateString(),
           appointmentTime: appointment.appointment_time,
           services: serviceNames,
-          action: newStatus === 'in_progress' ? 'in_progress' : newStatus === 'complete' ? 'complete' : 'cancel',
+          action: newStatus === 'in_progress' ? 'in_progress' : 'cancel',
           notes: appointment.notes
         }
       });
@@ -193,6 +222,94 @@ export default function AdminDashboard() {
     } catch (error: any) {
       toast({
         title: "Error updating status",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleCompleteAppointment = async () => {
+    if (!completingAppointment || actionLoading) return;
+    setActionLoading(completingAppointment.id);
+
+    try {
+      // Calculate totals
+      const subtotal = parseFloat(completionData.subtotal) || 0;
+      const taxes = parseFloat(completionData.taxes) || 0;
+      const totalCost = parseFloat(completionData.totalCost) || subtotal + taxes;
+
+      // Convert services performed to proper format
+      const servicesPerformed = completionData.servicesPerformed
+        .filter(s => s.service && s.cost)
+        .map(s => ({ service: s.service, cost: parseFloat(s.cost) || 0 }));
+
+      // Save to completed_services table
+      const { error: completedError } = await supabase
+        .from('completed_services')
+        .insert({
+          appointment_id: completingAppointment.id,
+          services_performed: servicesPerformed,
+          items_purchased: completionData.itemsPurchased || null,
+          subtotal,
+          taxes,
+          total_cost: totalCost,
+          notes: completionData.notes || null
+        });
+
+      if (completedError) throw completedError;
+
+      // Update appointment status
+      const { error: updateError } = await supabase
+        .from('appointments')
+        .update({ status: 'complete' })
+        .eq('id', completingAppointment.id);
+
+      if (updateError) throw updateError;
+
+      // Send detailed invoice email
+      const serviceNames = getServiceNames(completingAppointment.service_ids).split(', ');
+      
+      await supabase.functions.invoke('send-appointment-email', {
+        body: {
+          to: completingAppointment.customer_email,
+          customerName: completingAppointment.customer_name,
+          confirmationNumber: completingAppointment.confirmation_number,
+          appointmentDate: new Date(completingAppointment.appointment_date).toLocaleDateString(),
+          appointmentTime: completingAppointment.appointment_time,
+          services: serviceNames,
+          action: 'complete',
+          notes: completingAppointment.notes,
+          invoice: {
+            servicesPerformed,
+            itemsPurchased: completionData.itemsPurchased,
+            subtotal,
+            taxes,
+            totalCost
+          }
+        }
+      });
+
+      toast({
+        title: "Appointment completed",
+        description: "Invoice sent to customer",
+      });
+
+      setCompletionDialogOpen(false);
+      setCompletingAppointment(null);
+      setCompletionData({
+        servicesPerformed: [],
+        itemsPurchased: "",
+        subtotal: "",
+        taxes: "",
+        totalCost: "",
+        notes: ""
+      });
+      fetchData();
+    } catch (error: any) {
+      toast({
+        title: "Error completing appointment",
         description: error.message,
         variant: "destructive",
       });
@@ -416,6 +533,45 @@ export default function AdminDashboard() {
     );
   };
 
+  const exportToCSV = () => {
+    const headers = ["Date", "Confirmation #", "Customer", "Services", "Items Purchased", "Subtotal", "Taxes", "Total", "Notes"];
+    
+    const rows = completedServices.map(cs => {
+      const appointment = appointments.find(a => a.id === cs.appointment_id);
+      const servicesPerformed = cs.services_performed.map((s: any) => `${s.service}: $${s.cost}`).join('; ');
+      
+      return [
+        cs.created_at ? new Date(cs.created_at).toLocaleDateString() : '',
+        appointment?.confirmation_number || '',
+        appointment?.customer_name || '',
+        servicesPerformed,
+        cs.items_purchased || '',
+        `$${cs.subtotal?.toFixed(2) || '0.00'}`,
+        `$${cs.taxes?.toFixed(2) || '0.00'}`,
+        `$${cs.total_cost?.toFixed(2) || '0.00'}`,
+        cs.notes || ''
+      ];
+    });
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `completed-services-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+
+    toast({
+      title: "Export successful",
+      description: "CSV file downloaded",
+    });
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <Navigation />
@@ -434,6 +590,7 @@ export default function AdminDashboard() {
             <TabsList>
               <TabsTrigger value="appointments">Appointments</TabsTrigger>
               <TabsTrigger value="services">Services</TabsTrigger>
+              <TabsTrigger value="completed">Completed Services</TabsTrigger>
             </TabsList>
 
             <TabsContent value="appointments">
@@ -559,15 +716,152 @@ export default function AdminDashboard() {
                               )}
 
                               {appointment.status === 'in_progress' && (
-                                <Button
-                                  size="sm"
-                                  variant="default"
-                                  disabled={actionLoading === appointment.id}
-                                  onClick={() => handleUpdateStatus(appointment, 'complete')}
-                                  title="Mark Complete"
-                                >
-                                  <CheckCircle className="h-4 w-4" />
-                                </Button>
+                                <Dialog open={completionDialogOpen && completingAppointment?.id === appointment.id} onOpenChange={(open) => {
+                                  setCompletionDialogOpen(open);
+                                  if (!open) {
+                                    setCompletingAppointment(null);
+                                    setCompletionData({
+                                      servicesPerformed: [],
+                                      itemsPurchased: "",
+                                      subtotal: "",
+                                      taxes: "",
+                                      totalCost: "",
+                                      notes: ""
+                                    });
+                                  }
+                                }}>
+                                  <DialogTrigger asChild>
+                                    <Button
+                                      size="sm"
+                                      variant="default"
+                                      disabled={actionLoading === appointment.id}
+                                      onClick={() => {
+                                        setCompletingAppointment(appointment);
+                                        setCompletionDialogOpen(true);
+                                      }}
+                                      title="Mark Complete"
+                                    >
+                                      <CheckCircle className="h-4 w-4" />
+                                    </Button>
+                                  </DialogTrigger>
+                                  <DialogContent className="max-h-[80vh] overflow-y-auto">
+                                    <DialogHeader>
+                                      <DialogTitle>Complete Appointment</DialogTitle>
+                                      <DialogDescription>
+                                        Add service details and final payment (all fields optional)
+                                      </DialogDescription>
+                                    </DialogHeader>
+                                    <div className="space-y-4">
+                                      <div>
+                                        <Label>Services Performed</Label>
+                                        <div className="space-y-2">
+                                          {completionData.servicesPerformed.map((item, index) => (
+                                            <div key={index} className="flex gap-2">
+                                              <Input
+                                                placeholder="Service name"
+                                                value={item.service}
+                                                onChange={(e) => {
+                                                  const updated = [...completionData.servicesPerformed];
+                                                  updated[index].service = e.target.value;
+                                                  setCompletionData({ ...completionData, servicesPerformed: updated });
+                                                }}
+                                              />
+                                              <Input
+                                                placeholder="Cost"
+                                                type="number"
+                                                step="0.01"
+                                                value={item.cost}
+                                                onChange={(e) => {
+                                                  const updated = [...completionData.servicesPerformed];
+                                                  updated[index].cost = e.target.value;
+                                                  setCompletionData({ ...completionData, servicesPerformed: updated });
+                                                }}
+                                              />
+                                              <Button
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => {
+                                                  const updated = completionData.servicesPerformed.filter((_, i) => i !== index);
+                                                  setCompletionData({ ...completionData, servicesPerformed: updated });
+                                                }}
+                                              >
+                                                <X className="h-4 w-4" />
+                                              </Button>
+                                            </div>
+                                          ))}
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => {
+                                              setCompletionData({
+                                                ...completionData,
+                                                servicesPerformed: [...completionData.servicesPerformed, { service: "", cost: "" }]
+                                              });
+                                            }}
+                                          >
+                                            <Plus className="mr-2 h-4 w-4" />
+                                            Add Service
+                                          </Button>
+                                        </div>
+                                      </div>
+
+                                      <div>
+                                        <Label>Items Purchased</Label>
+                                        <Textarea
+                                          placeholder="List any parts or items..."
+                                          value={completionData.itemsPurchased}
+                                          onChange={(e) => setCompletionData({ ...completionData, itemsPurchased: e.target.value })}
+                                        />
+                                      </div>
+
+                                      <div className="grid grid-cols-3 gap-4">
+                                        <div>
+                                          <Label>Subtotal</Label>
+                                          <Input
+                                            type="number"
+                                            step="0.01"
+                                            placeholder="0.00"
+                                            value={completionData.subtotal}
+                                            onChange={(e) => setCompletionData({ ...completionData, subtotal: e.target.value })}
+                                          />
+                                        </div>
+                                        <div>
+                                          <Label>Taxes</Label>
+                                          <Input
+                                            type="number"
+                                            step="0.01"
+                                            placeholder="0.00"
+                                            value={completionData.taxes}
+                                            onChange={(e) => setCompletionData({ ...completionData, taxes: e.target.value })}
+                                          />
+                                        </div>
+                                        <div>
+                                          <Label>Total</Label>
+                                          <Input
+                                            type="number"
+                                            step="0.01"
+                                            placeholder="0.00"
+                                            value={completionData.totalCost}
+                                            onChange={(e) => setCompletionData({ ...completionData, totalCost: e.target.value })}
+                                          />
+                                        </div>
+                                      </div>
+
+                                      <div>
+                                        <Label>Notes</Label>
+                                        <Textarea
+                                          placeholder="Additional notes..."
+                                          value={completionData.notes}
+                                          onChange={(e) => setCompletionData({ ...completionData, notes: e.target.value })}
+                                        />
+                                      </div>
+
+                                      <Button onClick={handleCompleteAppointment} className="w-full" disabled={actionLoading === appointment.id}>
+                                        {actionLoading === appointment.id ? "Completing..." : "Complete Appointment"}
+                                      </Button>
+                                    </div>
+                                  </DialogContent>
+                                </Dialog>
                               )}
 
                               {appointment.status !== 'cancelled' && appointment.status !== 'complete' && (
@@ -595,6 +889,65 @@ export default function AdminDashboard() {
                           </TableCell>
                         </TableRow>
                       ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="completed">
+          <Card className="shadow-strong">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle>Completed Services</CardTitle>
+              <Button onClick={exportToCSV} disabled={completedServices.length === 0}>
+                <Download className="mr-2 h-4 w-4" />
+                Export to CSV
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <p>Loading completed services...</p>
+              ) : completedServices.length === 0 ? (
+                <p className="text-muted-foreground">No completed services found</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Confirmation #</TableHead>
+                        <TableHead>Customer</TableHead>
+                        <TableHead>Services Performed</TableHead>
+                        <TableHead>Items</TableHead>
+                        <TableHead>Total</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {completedServices.map((cs) => {
+                        const appointment = appointments.find(a => a.id === cs.appointment_id);
+                        return (
+                          <TableRow key={cs.id}>
+                            <TableCell>
+                              {new Date(cs.created_at).toLocaleDateString()}
+                            </TableCell>
+                            <TableCell className="font-mono text-xs">
+                              {appointment?.confirmation_number}
+                            </TableCell>
+                            <TableCell>{appointment?.customer_name}</TableCell>
+                            <TableCell>
+                              {cs.services_performed.map((s: any) => (
+                                <div key={s.service} className="text-sm">
+                                  {s.service}: ${s.cost.toFixed(2)}
+                                </div>
+                              ))}
+                            </TableCell>
+                            <TableCell className="text-sm">{cs.items_purchased || '-'}</TableCell>
+                            <TableCell className="font-medium">${cs.total_cost?.toFixed(2) || '0.00'}</TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </div>

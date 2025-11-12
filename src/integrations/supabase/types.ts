@@ -59,6 +59,53 @@ export type Database = {
         }
         Relationships: []
       }
+      completed_services: {
+        Row: {
+          appointment_id: string
+          created_at: string
+          id: string
+          items_purchased: string | null
+          notes: string | null
+          services_performed: Json | null
+          subtotal: number | null
+          taxes: number | null
+          total_cost: number | null
+          updated_at: string
+        }
+        Insert: {
+          appointment_id: string
+          created_at?: string
+          id?: string
+          items_purchased?: string | null
+          notes?: string | null
+          services_performed?: Json | null
+          subtotal?: number | null
+          taxes?: number | null
+          total_cost?: number | null
+          updated_at?: string
+        }
+        Update: {
+          appointment_id?: string
+          created_at?: string
+          id?: string
+          items_purchased?: string | null
+          notes?: string | null
+          services_performed?: Json | null
+          subtotal?: number | null
+          taxes?: number | null
+          total_cost?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "completed_services_appointment_id_fkey"
+            columns: ["appointment_id"]
+            isOneToOne: false
+            referencedRelation: "appointments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string
