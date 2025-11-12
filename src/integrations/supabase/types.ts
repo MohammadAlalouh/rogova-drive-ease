@@ -70,6 +70,7 @@ export type Database = {
       }
       completed_services: {
         Row: {
+          amount_received: number | null
           appointment_date: string | null
           appointment_id: string | null
           appointment_time: string | null
@@ -84,9 +85,12 @@ export type Database = {
           discount: number | null
           hours_worked: number | null
           id: string
+          is_record_complete: boolean | null
           items_purchased: Json | null
           notes: string | null
           payment_method: Database["public"]["Enums"]["payment_method"]
+          payment_status: string | null
+          remaining_balance: number | null
           services_performed: Json | null
           staff_hours: Json | null
           staff_ids: string[] | null
@@ -97,6 +101,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          amount_received?: number | null
           appointment_date?: string | null
           appointment_id?: string | null
           appointment_time?: string | null
@@ -111,9 +116,12 @@ export type Database = {
           discount?: number | null
           hours_worked?: number | null
           id?: string
+          is_record_complete?: boolean | null
           items_purchased?: Json | null
           notes?: string | null
           payment_method?: Database["public"]["Enums"]["payment_method"]
+          payment_status?: string | null
+          remaining_balance?: number | null
           services_performed?: Json | null
           staff_hours?: Json | null
           staff_ids?: string[] | null
@@ -124,6 +132,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          amount_received?: number | null
           appointment_date?: string | null
           appointment_id?: string | null
           appointment_time?: string | null
@@ -138,9 +147,12 @@ export type Database = {
           discount?: number | null
           hours_worked?: number | null
           id?: string
+          is_record_complete?: boolean | null
           items_purchased?: Json | null
           notes?: string | null
           payment_method?: Database["public"]["Enums"]["payment_method"]
+          payment_status?: string | null
+          remaining_balance?: number | null
           services_performed?: Json | null
           staff_hours?: Json | null
           staff_ids?: string[] | null

@@ -77,6 +77,10 @@ interface CompletedService {
   appointment_date: string | null;
   appointment_time: string | null;
   confirmation_number: string | null;
+  amount_received: number;
+  remaining_balance: number;
+  payment_status: string;
+  is_record_complete: boolean;
 }
 
 interface GroupedCompletedServices {
@@ -107,7 +111,9 @@ export default function AdminDashboard() {
     taxRate: "14",
     discount: "",
     notes: "",
-    paymentMethod: "cash" as string
+    paymentMethod: "cash" as string,
+    paymentStatus: "unpaid" as string,
+    amountReceived: "" as string
   });
   const [groupBy, setGroupBy] = useState<"month" | "staff">("month");
   const [staffExportDialogOpen, setStaffExportDialogOpen] = useState(false);
@@ -115,6 +121,7 @@ export default function AdminDashboard() {
   const [editingStaff, setEditingStaff] = useState<Staff | null>(null);
   const [appointmentView, setAppointmentView] = useState<"all" | "by-day" | "today">("today");
   const [addAppointmentDialogOpen, setAddAppointmentDialogOpen] = useState(false);
+  const [editingCompletedService, setEditingCompletedService] = useState<{[key: string]: CompletedService}>({});
   const [newAppointment, setNewAppointment] = useState({
     customerName: "",
     customerEmail: "",
@@ -336,6 +343,10 @@ export default function AdminDashboard() {
         return staffMember ? staffMember.name : 'Unknown';
       });
 
+      // Calculate payment fields
+      const amountReceived = parseFloat(completionData.amountReceived) || 0;
+      const remainingBalance = totalCost - amountReceived;
+
       // Save to completed_services table with ALL appointment data copied
       const { error: completedError } = await supabase
         .from('completed_services')
@@ -361,7 +372,10 @@ export default function AdminDashboard() {
           discount,
           total_cost: totalCost,
           notes: completionData.notes || completingAppointment.notes || null,
-          payment_method: completionData.paymentMethod as any
+          payment_method: completionData.paymentMethod as any,
+          payment_status: completionData.paymentStatus,
+          amount_received: amountReceived,
+          remaining_balance: remainingBalance
         });
 
       if (completedError) throw completedError;
@@ -418,7 +432,9 @@ export default function AdminDashboard() {
         taxRate: "14",
         discount: "",
         notes: "",
-        paymentMethod: "cash"
+        paymentMethod: "cash",
+        paymentStatus: "unpaid",
+        amountReceived: ""
       });
       fetchData();
     } catch (error: any) {
@@ -844,6 +860,57 @@ export default function AdminDashboard() {
       .join(', ');
   };
 
+  const updateCompletedServiceField = async (serviceId: string, field: keyof CompletedService, value: any) => {
+    try {
+      const { error } = await supabase
+        .from('completed_services')
+        .update({ [field]: value })
+        .eq('id', serviceId);
+
+      if (error) throw error;
+
+      // Update local state
+      setCompletedServices(prev => 
+        prev.map(cs => cs.id === serviceId ? { ...cs, [field]: value } : cs)
+      );
+
+      toast({
+        title: "Updated",
+        description: "Field updated successfully",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error updating field",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const markRecordComplete = async (serviceId: string) => {
+    try {
+      const { error } = await supabase
+        .from('completed_services')
+        .update({ is_record_complete: true })
+        .eq('id', serviceId);
+
+      if (error) throw error;
+
+      fetchData();
+
+      toast({
+        title: "Record completed",
+        description: "This record is now immutable",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error completing record",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
   const calculateCompletionTotals = () => {
     const servicesSubtotal = completionData.servicesPerformed
       .filter(s => s.service && s.cost)
@@ -1031,7 +1098,9 @@ export default function AdminDashboard() {
                   taxRate: "14",
                   discount: "",
                   notes: "",
-                  paymentMethod: "cash"
+                  paymentMethod: "cash",
+                  paymentStatus: "unpaid",
+                  amountReceived: ""
                 });
               }
             }}>
@@ -1245,6 +1314,31 @@ export default function AdminDashboard() {
                     </Select>
                   </div>
 
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label>Payment Status</Label>
+                      <Select value={completionData.paymentStatus} onValueChange={(value) => setCompletionData({ ...completionData, paymentStatus: value })}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="paid">Paid</SelectItem>
+                          <SelectItem value="unpaid">Unpaid</SelectItem>
+                          <SelectItem value="partially_paid">Partially Paid</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label>Amount Received ($)</Label>
+                      <Input
+                        type="number"
+                        value={completionData.amountReceived}
+                        onChange={(e) => setCompletionData({ ...completionData, amountReceived: e.target.value })}
+                        placeholder="0"
+                      />
+                    </div>
+                  </div>
+
                   <div>
                     <Label>Additional Notes</Label>
                     <Textarea
@@ -1304,6 +1398,31 @@ export default function AdminDashboard() {
                         ).toFixed(2)}
                       </span>
                     </div>
+                    {parseFloat(completionData.amountReceived) > 0 && (
+                      <>
+                        <div className="flex justify-between text-sm text-blue-600">
+                          <span>Amount Received:</span>
+                          <span className="font-medium">
+                            ${parseFloat(completionData.amountReceived).toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-sm text-orange-600">
+                          <span>Remaining Balance:</span>
+                          <span className="font-medium">
+                            ${((
+                              completionData.servicesPerformed
+                                .reduce((sum, s) => sum + (parseFloat(s.cost) || 0), 0) +
+                              completionData.itemsPurchased
+                                .reduce((sum, i) => sum + (parseFloat(i.cost) || 0), 0) +
+                              (completionData.servicesPerformed
+                                .reduce((sum, s) => sum + (parseFloat(s.cost) || 0), 0) *
+                                ((parseFloat(completionData.taxRate) || 0) / 100)) -
+                              (parseFloat(completionData.discount) || 0)
+                            ) - (parseFloat(completionData.amountReceived) || 0)).toFixed(2)}
+                          </span>
+                        </div>
+                      </>
+                    )}
                   </div>
 
                   <div className="flex gap-2">
@@ -1327,7 +1446,9 @@ export default function AdminDashboard() {
                           taxRate: "14",
                           discount: "",
                           notes: "",
-                          paymentMethod: "cash"
+                          paymentMethod: "cash",
+                          paymentStatus: "unpaid",
+                          amountReceived: ""
                         });
                       }}
                     >
@@ -1536,7 +1657,8 @@ export default function AdminDashboard() {
     const headers = [
       "Date", "Confirmation #", "Customer", "Car Make", "Car Model", "Car Year",
       "Services", "Service Costs", "Items", "Item Costs", 
-      ...staffColumns, "Total Hours", "Subtotal", "Discount", "Taxes", "Total", "Payment Method", "Notes"
+      ...staffColumns, "Total Hours", "Subtotal", "Discount", "Taxes", "Total", 
+      "Payment Method", "Payment Status", "Amount Received", "Remaining Balance", "Notes"
     ];
     
     const rows = completedServices.map(cs => {
@@ -1575,6 +1697,9 @@ export default function AdminDashboard() {
         `$${cs.taxes?.toFixed(2) || '0.00'}`,
         `$${cs.total_cost?.toFixed(2) || '0.00'}`,
         cs.payment_method || '',
+        cs.payment_status || 'unpaid',
+        `$${cs.amount_received?.toFixed(2) || '0.00'}`,
+        `$${cs.remaining_balance?.toFixed(2) || '0.00'}`,
         cs.notes || ''
       ];
     });
@@ -1995,26 +2120,31 @@ export default function AdminDashboard() {
                         <div className="inline-block min-w-full align-middle">
                           <div className="overflow-hidden">
                             <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead className="min-w-[100px]">Date</TableHead>
-                                  <TableHead className="min-w-[120px]">Confirmation #</TableHead>
-                                  <TableHead className="min-w-[120px]">Customer</TableHead>
-                                  <TableHead className="min-w-[150px]">Car</TableHead>
-                                  <TableHead className="min-w-[150px]">Services</TableHead>
-                                  <TableHead className="min-w-[120px]">Items</TableHead>
-                                  <TableHead className="min-w-[100px]">Staff</TableHead>
-                                  <TableHead className="min-w-[80px]">Hours</TableHead>
-                                  <TableHead className="min-w-[100px]">Discount</TableHead>
-                                  <TableHead className="min-w-[100px]">Payment</TableHead>
-                                  <TableHead className="min-w-[100px]">Total</TableHead>
-                                  <TableHead className="min-w-[150px]">Notes</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead className="min-w-[100px]">Date</TableHead>
+                                    <TableHead className="min-w-[120px]">Confirmation #</TableHead>
+                                    <TableHead className="min-w-[120px]">Customer</TableHead>
+                                    <TableHead className="min-w-[150px]">Car</TableHead>
+                                    <TableHead className="min-w-[150px]">Services</TableHead>
+                                    <TableHead className="min-w-[120px]">Items</TableHead>
+                                    <TableHead className="min-w-[100px]">Staff</TableHead>
+                                    <TableHead className="min-w-[80px]">Hours</TableHead>
+                                    <TableHead className="min-w-[100px]">Discount</TableHead>
+                                    <TableHead className="min-w-[100px]">Payment Method</TableHead>
+                                    <TableHead className="min-w-[100px]">Total</TableHead>
+                                    <TableHead className="min-w-[120px]">Pay Status</TableHead>
+                                    <TableHead className="min-w-[120px]">Amount Received</TableHead>
+                                    <TableHead className="min-w-[120px]">Balance Due</TableHead>
+                                    <TableHead className="min-w-[150px]">Notes</TableHead>
+                                    <TableHead className="min-w-[100px]">Actions</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                               <TableBody>
                                 {services.map((cs) => {
+                                  const isEditable = !cs.is_record_complete;
                                   return (
-                                    <TableRow key={cs.id}>
+                                    <TableRow key={cs.id} className={cs.is_record_complete ? "bg-muted/30" : ""}>
                                       <TableCell>
                                         {cs.appointment_date ? new Date(cs.appointment_date).toLocaleDateString() : new Date(cs.created_at).toLocaleDateString()}
                                       </TableCell>
@@ -2046,7 +2176,74 @@ export default function AdminDashboard() {
                                       <TableCell className="font-semibold">
                                         ${cs.total_cost.toFixed(2)}
                                       </TableCell>
-                                      <TableCell className="text-sm">{cs.notes || '-'}</TableCell>
+                                      <TableCell>
+                                        {isEditable ? (
+                                          <Select 
+                                            value={cs.payment_status} 
+                                            onValueChange={(value) => updateCompletedServiceField(cs.id, 'payment_status', value)}
+                                          >
+                                            <SelectTrigger className="w-32">
+                                              <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                              <SelectItem value="paid">Paid</SelectItem>
+                                              <SelectItem value="unpaid">Unpaid</SelectItem>
+                                              <SelectItem value="partially_paid">Partially Paid</SelectItem>
+                                            </SelectContent>
+                                          </Select>
+                                        ) : (
+                                          <Badge variant={cs.payment_status === 'paid' ? 'secondary' : cs.payment_status === 'unpaid' ? 'destructive' : 'default'}>
+                                            {cs.payment_status.replace('_', ' ').toUpperCase()}
+                                          </Badge>
+                                        )}
+                                      </TableCell>
+                                      <TableCell>
+                                        {isEditable ? (
+                                          <Input
+                                            type="number"
+                                            value={cs.amount_received}
+                                            className="w-24"
+                                            onChange={(e) => updateCompletedServiceField(cs.id, 'amount_received', parseFloat(e.target.value) || 0)}
+                                            onBlur={(e) => {
+                                              const amountReceived = parseFloat(e.target.value) || 0;
+                                              const remainingBalance = cs.total_cost - amountReceived;
+                                              updateCompletedServiceField(cs.id, 'remaining_balance', remainingBalance);
+                                            }}
+                                          />
+                                        ) : (
+                                          <span className="font-medium">${cs.amount_received?.toFixed(2) || '0.00'}</span>
+                                        )}
+                                      </TableCell>
+                                      <TableCell>
+                                        <span className={`font-medium ${cs.remaining_balance > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                                          ${cs.remaining_balance?.toFixed(2) || '0.00'}
+                                        </span>
+                                      </TableCell>
+                                      <TableCell>
+                                        {isEditable ? (
+                                          <Input
+                                            value={cs.notes || ''}
+                                            className="min-w-[150px]"
+                                            onChange={(e) => updateCompletedServiceField(cs.id, 'notes', e.target.value || null)}
+                                          />
+                                        ) : (
+                                          <span className="text-sm">{cs.notes || '-'}</span>
+                                        )}
+                                      </TableCell>
+                                      <TableCell>
+                                        {isEditable ? (
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => markRecordComplete(cs.id)}
+                                          >
+                                            <CheckCircle className="h-4 w-4 mr-1" />
+                                            Complete
+                                          </Button>
+                                        ) : (
+                                          <Badge variant="secondary">Locked</Badge>
+                                        )}
+                                      </TableCell>
                                     </TableRow>
                                   );
                                 })}
