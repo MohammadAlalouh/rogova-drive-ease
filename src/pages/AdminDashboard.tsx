@@ -403,10 +403,14 @@ export default function AdminDashboard() {
     setActionLoading(editingAppointment.id);
 
     try {
+      // Format date in local timezone to avoid timezone shifts
+      const localDate = new Date(editDate.getFullYear(), editDate.getMonth(), editDate.getDate());
+      const dateStr = localDate.toISOString().split('T')[0];
+      
       const { error } = await supabase
         .from('appointments')
         .update({
-          appointment_date: editDate.toISOString().split('T')[0],
+          appointment_date: dateStr,
           appointment_time: editTime
         })
         .eq('id', editingAppointment.id);
@@ -714,6 +718,10 @@ export default function AdminDashboard() {
       const { data: confData, error: confError } = await supabase.rpc('generate_confirmation_number');
       if (confError) throw confError;
 
+      // Format date in local timezone to avoid timezone shifts
+      const localDate = new Date(newAppointment.appointmentDate.getFullYear(), newAppointment.appointmentDate.getMonth(), newAppointment.appointmentDate.getDate());
+      const dateStr = localDate.toISOString().split('T')[0];
+
       // Insert appointment
       const { error: insertError } = await supabase
         .from('appointments')
@@ -725,7 +733,7 @@ export default function AdminDashboard() {
           car_model: newAppointment.carModel,
           car_year: newAppointment.carYear,
           service_ids: newAppointment.serviceIds,
-          appointment_date: newAppointment.appointmentDate.toISOString().split('T')[0],
+          appointment_date: dateStr,
           appointment_time: newAppointment.appointmentTime,
           notes: newAppointment.notes || null,
           confirmation_number: confData,
@@ -841,7 +849,11 @@ export default function AdminDashboard() {
   const groupAppointmentsByDay = () => {
     const grouped: Record<string, Appointment[]> = {};
     appointments.forEach(apt => {
-      const dateKey = new Date(apt.appointment_date).toLocaleDateString('en-US', {
+      // Use the date string directly to avoid timezone issues
+      const date = apt.appointment_date;
+      const [year, month, day] = date.split('-');
+      const dateObj = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+      const dateKey = dateObj.toLocaleDateString('en-US', {
         weekday: 'long',
         year: 'numeric',
         month: 'long',
@@ -870,7 +882,7 @@ export default function AdminDashboard() {
       <TableCell>
         {showDate && (
           <div>
-            {new Date(appointment.appointment_date).toLocaleDateString()}
+            {appointment.appointment_date}
           </div>
         )}
         <div className="text-sm text-muted-foreground">

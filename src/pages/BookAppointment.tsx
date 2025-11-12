@@ -107,7 +107,9 @@ export default function BookAppointment() {
         return;
       }
 
-      const dateStr = date.toISOString().split('T')[0];
+      // Format date in local timezone to avoid timezone shifts
+      const localDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+      const dateStr = localDate.toISOString().split('T')[0];
       const { data, error } = await supabase
         .from('appointments')
         .select('appointment_time, service_ids, status')
@@ -192,11 +194,15 @@ export default function BookAppointment() {
         .filter(s => selectedServices.includes(s.id))
         .reduce((sum, s) => sum + s.duration_minutes, 0);
 
+      // Format date in local timezone
+      const checkLocalDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+      const checkDateStr = checkLocalDate.toISOString().split('T')[0];
+
       // Check for overlapping appointments
       const { data: existingAppointments, error: checkError } = await supabase
         .from('appointments')
         .select('appointment_time, service_ids')
-        .eq('appointment_date', date.toISOString().split('T')[0])
+        .eq('appointment_date', checkDateStr)
         .neq('status', 'cancelled');
 
       if (checkError) throw checkError;
@@ -239,6 +245,10 @@ export default function BookAppointment() {
       if (confError) throw confError;
 
       // Create appointment
+      // Format date in local timezone to avoid timezone shifts
+      const localDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+      const dateStr = localDate.toISOString().split('T')[0];
+      
       const { error: appointmentError } = await supabase
         .from('appointments')
         .insert({
@@ -249,7 +259,7 @@ export default function BookAppointment() {
           car_make: validation.carMake,
           car_model: validation.carModel,
           car_year: validation.carYear,
-          appointment_date: date.toISOString().split('T')[0],
+          appointment_date: dateStr,
           appointment_time: timeSlot,
           service_ids: selectedServices,
           notes: validation.notes || null,
