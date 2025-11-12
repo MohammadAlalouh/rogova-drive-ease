@@ -130,7 +130,8 @@ export default function AdminDashboard() {
   const [newStaff, setNewStaff] = useState({
     name: "",
     email: "",
-    phone: ""
+    phone: "",
+    is_active: true
   });
   const [newService, setNewService] = useState({
     name: "",
@@ -644,7 +645,8 @@ export default function AdminDashboard() {
           .update({
             name: newStaff.name,
             email: newStaff.email || null,
-            phone: newStaff.phone || null
+            phone: newStaff.phone || null,
+            is_active: newStaff.is_active
           })
           .eq('id', editingStaff.id);
 
@@ -666,7 +668,7 @@ export default function AdminDashboard() {
 
       setStaffDialogOpen(false);
       setEditingStaff(null);
-      setNewStaff({ name: "", email: "", phone: "" });
+      setNewStaff({ name: "", email: "", phone: "", is_active: true });
       fetchData();
     } catch (error: any) {
       toast({
@@ -680,23 +682,23 @@ export default function AdminDashboard() {
   };
 
   const handleDeleteStaff = async (staffId: string) => {
-    if (!confirm("Are you sure you want to deactivate this staff member?")) return;
+    if (!confirm("Are you sure you want to permanently delete this staff member? This action cannot be undone.")) return;
     if (actionLoading) return;
     setActionLoading(staffId);
 
     try {
       const { error } = await supabase
         .from('staff' as any)
-        .update({ is_active: false })
+        .delete()
         .eq('id', staffId);
 
       if (error) throw error;
 
-      toast({ title: "Staff deactivated" });
+      toast({ title: "Staff deleted permanently" });
       fetchData();
     } catch (error: any) {
       toast({
-        title: "Error deactivating staff",
+        title: "Error deleting staff",
         description: error.message,
         variant: "destructive",
       });
@@ -2053,7 +2055,7 @@ export default function AdminDashboard() {
                 <DialogTrigger asChild>
                   <Button onClick={() => {
                     setEditingStaff(null);
-                    setNewStaff({ name: "", email: "", phone: "" });
+                    setNewStaff({ name: "", email: "", phone: "", is_active: true });
                   }} size="sm">
                     <Plus className="mr-2 h-4 w-4" />
                     <span className="hidden sm:inline">Add Staff</span>
@@ -2091,6 +2093,18 @@ export default function AdminDashboard() {
                         placeholder="(123) 456-7890"
                       />
                     </div>
+                    {editingStaff && (
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="staff-active"
+                          checked={newStaff.is_active}
+                          onCheckedChange={(checked) => setNewStaff({ ...newStaff, is_active: checked as boolean })}
+                        />
+                        <Label htmlFor="staff-active" className="cursor-pointer">
+                          Active
+                        </Label>
+                      </div>
+                    )}
                     <Button onClick={handleSaveStaff} className="w-full" disabled={actionLoading === "staff"}>
                       {actionLoading === "staff" ? "Saving..." : (editingStaff ? "Update Staff" : "Add Staff")}
                     </Button>
@@ -2139,23 +2153,22 @@ export default function AdminDashboard() {
                                   setNewStaff({
                                     name: s.name,
                                     email: s.email || "",
-                                    phone: s.phone || ""
+                                    phone: s.phone || "",
+                                    is_active: s.is_active
                                   });
                                   setStaffDialogOpen(true);
                                 }}
                               >
                                 <Edit className="h-4 w-4" />
                               </Button>
-                              {s.is_active && (
-                                <Button
-                                  size="sm"
-                                  variant="destructive"
-                                  disabled={actionLoading === s.id}
-                                  onClick={() => handleDeleteStaff(s.id)}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              )}
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                disabled={actionLoading === s.id}
+                                onClick={() => handleDeleteStaff(s.id)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
                             </div>
                           </TableCell>
                         </TableRow>
