@@ -18,6 +18,9 @@ export type Database = {
         Row: {
           appointment_date: string
           appointment_time: string
+          car_make: string
+          car_model: string
+          car_year: number
           confirmation_number: string
           created_at: string
           customer_email: string
@@ -32,6 +35,9 @@ export type Database = {
         Insert: {
           appointment_date: string
           appointment_time: string
+          car_make?: string
+          car_model?: string
+          car_year?: number
           confirmation_number: string
           created_at?: string
           customer_email: string
@@ -46,6 +52,9 @@ export type Database = {
         Update: {
           appointment_date?: string
           appointment_time?: string
+          car_make?: string
+          car_model?: string
+          car_year?: number
           confirmation_number?: string
           created_at?: string
           customer_email?: string
@@ -63,10 +72,12 @@ export type Database = {
         Row: {
           appointment_id: string
           created_at: string
+          hours_worked: number | null
           id: string
-          items_purchased: string | null
+          items_purchased: Json | null
           notes: string | null
           services_performed: Json | null
+          staff_ids: string[] | null
           subtotal: number | null
           taxes: number | null
           total_cost: number | null
@@ -75,10 +86,12 @@ export type Database = {
         Insert: {
           appointment_id: string
           created_at?: string
+          hours_worked?: number | null
           id?: string
-          items_purchased?: string | null
+          items_purchased?: Json | null
           notes?: string | null
           services_performed?: Json | null
+          staff_ids?: string[] | null
           subtotal?: number | null
           taxes?: number | null
           total_cost?: number | null
@@ -87,10 +100,12 @@ export type Database = {
         Update: {
           appointment_id?: string
           created_at?: string
+          hours_worked?: number | null
           id?: string
-          items_purchased?: string | null
+          items_purchased?: Json | null
           notes?: string | null
           services_performed?: Json | null
+          staff_ids?: string[] | null
           subtotal?: number | null
           taxes?: number | null
           total_cost?: number | null
@@ -153,6 +168,36 @@ export type Database = {
           is_active?: boolean
           name?: string
           price_range?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      staff: {
+        Row: {
+          created_at: string
+          email: string | null
+          id: string
+          is_active: boolean
+          name: string
+          phone: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          phone?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          phone?: string | null
           updated_at?: string
         }
         Relationships: []

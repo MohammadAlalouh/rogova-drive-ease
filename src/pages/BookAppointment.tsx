@@ -51,7 +51,6 @@ export default function BookAppointment() {
   const [lookupConfirmation, setLookupConfirmation] = useState("");
   const [foundAppointment, setFoundAppointment] = useState<any>(null);
   const [lookingUp, setLookingUp] = useState(false);
-  const [editMode, setEditMode] = useState(false);
   
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -361,45 +360,6 @@ export default function BookAppointment() {
       });
     } finally {
       setLookingUp(false);
-    }
-  };
-
-  const handleUpdateAppointment = async () => {
-    if (!foundAppointment) return;
-
-    try {
-      const validation = bookingSchema.parse({ 
-        name: foundAppointment.customer_name, 
-        email: foundAppointment.customer_email, 
-        phone: foundAppointment.customer_phone, 
-        notes: foundAppointment.notes 
-      });
-
-      const { error } = await supabase
-        .from('appointments')
-        .update({
-          customer_name: validation.name,
-          customer_email: validation.email,
-          customer_phone: validation.phone,
-          appointment_date: foundAppointment.appointment_date,
-          appointment_time: foundAppointment.appointment_time,
-          notes: validation.notes,
-        })
-        .eq('id', foundAppointment.id);
-
-      if (error) throw error;
-
-      toast({
-        title: "Appointment updated!",
-        description: "Your appointment has been successfully updated",
-      });
-      setEditMode(false);
-    } catch (error: any) {
-      toast({
-        title: "Error updating appointment",
-        description: error.message,
-        variant: "destructive",
-      });
     }
   };
 
@@ -720,58 +680,7 @@ export default function BookAppointment() {
                         </div>
                       </div>
 
-                      {editMode ? (
-                        <div className="space-y-4">
-                          <div className="space-y-2">
-                            <Label htmlFor="editName" className="text-base">Name</Label>
-                            <Input
-                              id="editName"
-                              value={foundAppointment.customer_name}
-                              onChange={(e) => setFoundAppointment({...foundAppointment, customer_name: e.target.value})}
-                              className="h-11"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="editEmail" className="text-base">Email</Label>
-                            <Input
-                              id="editEmail"
-                              type="email"
-                              value={foundAppointment.customer_email}
-                              onChange={(e) => setFoundAppointment({...foundAppointment, customer_email: e.target.value})}
-                              className="h-11"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="editPhone" className="text-base">Phone</Label>
-                            <Input
-                              id="editPhone"
-                              type="tel"
-                              value={foundAppointment.customer_phone}
-                              onChange={(e) => setFoundAppointment({...foundAppointment, customer_phone: e.target.value})}
-                              className="h-11"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="editNotes" className="text-base">Notes</Label>
-                            <Textarea
-                              id="editNotes"
-                              value={foundAppointment.notes || ""}
-                              onChange={(e) => setFoundAppointment({...foundAppointment, notes: e.target.value})}
-                              rows={4}
-                              className="resize-none"
-                            />
-                          </div>
-                          <div className="flex flex-col sm:flex-row gap-3">
-                            <Button onClick={handleUpdateAppointment} className="flex-1 bg-accent hover:bg-accent/90 h-11">
-                              Save Changes
-                            </Button>
-                            <Button onClick={() => setEditMode(false)} variant="outline" className="flex-1 h-11">
-                              Cancel
-                            </Button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="space-y-4">
+                      <div className="space-y-4">
                           <div className="space-y-1">
                             <Label className="text-sm text-muted-foreground">Customer Name</Label>
                             <p className="text-base font-medium">{foundAppointment.customer_name}</p>
@@ -790,14 +699,9 @@ export default function BookAppointment() {
                               <p className="text-base">{foundAppointment.notes}</p>
                             </div>
                           )}
-                          <div className="flex flex-col sm:flex-row gap-3">
-                            <Button onClick={() => setEditMode(true)} variant="outline" className="flex-1 h-11">
-                              Edit Appointment
-                            </Button>
-                            <Button onClick={handleCancelAppointment} variant="destructive" className="flex-1 h-11">
-                              Cancel Appointment
-                            </Button>
-                          </div>
+                          <Button onClick={handleCancelAppointment} variant="destructive" className="w-full h-11">
+                            Cancel Appointment
+                          </Button>
                           <Button 
                             onClick={() => {
                               setFoundAppointment(null);
@@ -811,7 +715,6 @@ export default function BookAppointment() {
                             Look Up Another Appointment
                           </Button>
                         </div>
-                      )}
                     </div>
                   )}
                 </CardContent>

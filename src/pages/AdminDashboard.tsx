@@ -26,6 +26,9 @@ interface Appointment {
   appointment_date: string;
   appointment_time: string;
   service_ids: string[];
+  car_make: string;
+  car_model: string;
+  car_year: number;
   notes: string | null;
   status: string;
 }
@@ -59,6 +62,10 @@ interface CompletedService {
   total_cost: number;
   notes: string;
   created_at: string;
+}
+
+interface GroupedCompletedServices {
+  [key: string]: CompletedService[];
 }
 
 export default function AdminDashboard() {
@@ -672,11 +679,25 @@ export default function AdminDashboard() {
     );
   };
 
+  const groupCompletedServicesByMonth = (): GroupedCompletedServices => {
+    const grouped: GroupedCompletedServices = {};
+    completedServices.forEach(cs => {
+      const date = new Date(cs.created_at);
+      const key = `${date.toLocaleString('default', { month: 'long' })} ${date.getFullYear()}`;
+      if (!grouped[key]) {
+        grouped[key] = [];
+      }
+      grouped[key].push(cs);
+    });
+    return grouped;
+  };
+
   const exportToCSV = () => {
-    const headers = ["Date", "Confirmation #", "Customer", "Services", "Items", "Staff", "Hours", "Subtotal", "Taxes", "Total", "Notes"];
+    const headers = ["Date", "Confirmation #", "Customer", "Car", "Services", "Items", "Staff", "Hours", "Subtotal", "Taxes", "Total", "Notes"];
     
     const rows = completedServices.map(cs => {
       const appointment = appointments.find(a => a.id === cs.appointment_id);
+      const carInfo = appointment ? `${appointment.car_year} ${appointment.car_make} ${appointment.car_model}` : 'N/A';
       const servicesPerformed = cs.services_performed.map((s: any) => `${s.service}: $${s.cost}`).join('; ');
       const itemsList = Array.isArray(cs.items_purchased) 
         ? cs.items_purchased.map((i: any) => `${i.name}: $${i.cost}`).join('; ')
@@ -687,6 +708,7 @@ export default function AdminDashboard() {
         cs.created_at ? new Date(cs.created_at).toLocaleDateString() : '',
         appointment?.confirmation_number || '',
         appointment?.customer_name || '',
+        carInfo,
         servicesPerformed,
         itemsList,
         staffNames,
@@ -1160,59 +1182,74 @@ export default function AdminDashboard() {
               ) : completedServices.length === 0 ? (
                 <p className="text-muted-foreground">No completed services found</p>
               ) : (
-                <div className="overflow-x-auto -mx-2 md:mx-0">
-                  <div className="inline-block min-w-full align-middle">
-                    <div className="overflow-hidden">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead className="min-w-[100px]">Date</TableHead>
-                            <TableHead className="min-w-[120px]">Confirmation #</TableHead>
-                            <TableHead className="min-w-[120px]">Customer</TableHead>
-                            <TableHead className="min-w-[150px]">Services</TableHead>
-                            <TableHead className="min-w-[120px]">Items</TableHead>
-                            <TableHead className="min-w-[100px]">Staff</TableHead>
-                            <TableHead className="min-w-[80px]">Hours</TableHead>
-                            <TableHead className="min-w-[100px]">Total</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                     <TableBody>
-                       {completedServices.map((cs) => {
-                         const appointment = appointments.find(a => a.id === cs.appointment_id);
-                         return (
-                           <TableRow key={cs.id}>
-                             <TableCell>
-                               {new Date(cs.created_at).toLocaleDateString()}
-                             </TableCell>
-                             <TableCell className="font-mono text-xs">
-                               {appointment?.confirmation_number}
-                             </TableCell>
-                             <TableCell>{appointment?.customer_name}</TableCell>
-                             <TableCell>
-                               {cs.services_performed.map((s: any) => (
-                                 <div key={s.service} className="text-sm">
-                                   {s.service}: ${s.cost.toFixed(2)}
-                                 </div>
-                               ))}
-                             </TableCell>
-                             <TableCell className="text-sm">
-                               {Array.isArray(cs.items_purchased) 
-                                 ? cs.items_purchased.map((i: any) => (
-                                     <div key={i.name}>{i.name}: ${i.cost.toFixed(2)}</div>
-                                   ))
-                                 : cs.items_purchased || '-'}
-                             </TableCell>
-                             <TableCell className="text-sm">{getStaffNames(cs.staff_ids || []) || '-'}</TableCell>
-                             <TableCell className="text-sm">{cs.hours_worked || 0}h</TableCell>
-                             <TableCell className="font-medium">${cs.total_cost?.toFixed(2) || '0.00'}</TableCell>
-                           </TableRow>
-                         );
-                       })}
-                     </TableBody>
-                    </Table>
-                  </div>
+                <div className="space-y-6">
+                  {Object.entries(groupCompletedServicesByMonth())
+                    .sort((a, b) => new Date(b[1][0].created_at).getTime() - new Date(a[1][0].created_at).getTime())
+                    .map(([monthYear, services]) => (
+                    <div key={monthYear} className="space-y-3">
+                      <h3 className="text-lg font-semibold text-foreground border-b pb-2">{monthYear}</h3>
+                      <div className="overflow-x-auto -mx-2 md:mx-0">
+                        <div className="inline-block min-w-full align-middle">
+                          <div className="overflow-hidden">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead className="min-w-[100px]">Date</TableHead>
+                                  <TableHead className="min-w-[120px]">Confirmation #</TableHead>
+                                  <TableHead className="min-w-[120px]">Customer</TableHead>
+                                  <TableHead className="min-w-[150px]">Car</TableHead>
+                                  <TableHead className="min-w-[150px]">Services</TableHead>
+                                  <TableHead className="min-w-[120px]">Items</TableHead>
+                                  <TableHead className="min-w-[100px]">Staff</TableHead>
+                                  <TableHead className="min-w-[80px]">Hours</TableHead>
+                                  <TableHead className="min-w-[100px]">Total</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {services.map((cs) => {
+                                  const appointment = appointments.find(a => a.id === cs.appointment_id);
+                                  return (
+                                    <TableRow key={cs.id}>
+                                      <TableCell>
+                                        {new Date(cs.created_at).toLocaleDateString()}
+                                      </TableCell>
+                                      <TableCell className="font-mono text-xs">
+                                        {appointment?.confirmation_number || 'N/A'}
+                                      </TableCell>
+                                      <TableCell>{appointment?.customer_name || 'N/A'}</TableCell>
+                                      <TableCell className="text-sm">
+                                        {appointment ? `${appointment.car_year} ${appointment.car_make} ${appointment.car_model}` : 'N/A'}
+                                      </TableCell>
+                                      <TableCell>
+                                        {cs.services_performed.map((s: any) => (
+                                          <div key={s.service} className="text-sm">
+                                            {s.service}: ${s.cost.toFixed(2)}
+                                          </div>
+                                        ))}
+                                      </TableCell>
+                                      <TableCell>
+                                        {cs.items_purchased.map((i: any) => (
+                                          <div key={i.name} className="text-sm">
+                                            {i.name}: ${i.cost.toFixed(2)}
+                                          </div>
+                                        ))}
+                                      </TableCell>
+                                      <TableCell>{getStaffNames(cs.staff_ids)}</TableCell>
+                                      <TableCell>{cs.hours_worked}</TableCell>
+                                      <TableCell className="font-semibold">
+                                        ${cs.total_cost.toFixed(2)}
+                                      </TableCell>
+                                    </TableRow>
+                                  );
+                                })}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              </div>
               )}
             </CardContent>
           </Card>
