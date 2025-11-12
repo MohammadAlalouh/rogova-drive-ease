@@ -70,8 +70,17 @@ export type Database = {
       }
       completed_services: {
         Row: {
+          appointment_date: string | null
           appointment_id: string | null
+          appointment_time: string | null
+          car_make: string | null
+          car_model: string | null
+          car_year: number | null
+          confirmation_number: string | null
           created_at: string
+          customer_email: string | null
+          customer_name: string | null
+          customer_phone: string | null
           hours_worked: number | null
           id: string
           items_purchased: Json | null
@@ -85,8 +94,17 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          appointment_date?: string | null
           appointment_id?: string | null
+          appointment_time?: string | null
+          car_make?: string | null
+          car_model?: string | null
+          car_year?: number | null
+          confirmation_number?: string | null
           created_at?: string
+          customer_email?: string | null
+          customer_name?: string | null
+          customer_phone?: string | null
           hours_worked?: number | null
           id?: string
           items_purchased?: Json | null
@@ -100,8 +118,17 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          appointment_date?: string | null
           appointment_id?: string | null
+          appointment_time?: string | null
+          car_make?: string | null
+          car_model?: string | null
+          car_year?: number | null
+          confirmation_number?: string | null
           created_at?: string
+          customer_email?: string | null
+          customer_name?: string | null
+          customer_phone?: string | null
           hours_worked?: number | null
           id?: string
           items_purchased?: Json | null
