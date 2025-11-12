@@ -1,1 +1,4 @@
 project_id = "orsqltbspcruzuhwwccc"
+
+[functions.send-appointment-email]
+verify_jwt = false

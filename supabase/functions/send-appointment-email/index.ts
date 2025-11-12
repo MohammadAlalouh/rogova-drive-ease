@@ -124,22 +124,46 @@ const handler = async (req: Request): Promise<Response> => {
         break;
     }
 
-    const emailResponse = await resend.emails.send({
+    // Send to customer first, then admin (with slight delay to respect rate limits)
+    const adminEmail = Deno.env.get("ADMIN_NOTIFICATION_EMAIL") || "mohammad.alalouh98@gmail.com";
+
+    const customerSend = await resend.emails.send({
       from: "Rogova Auto Shop <onboarding@resend.dev>",
       to: [to],
       subject: emailSubject,
       html: emailContent,
     });
 
-    console.log("Email sent successfully:", emailResponse);
+    // Simple rate-limit spacing between sends (Resend: 2 req/sec)
+    await new Promise((r) => setTimeout(r, 600));
 
-    return new Response(JSON.stringify(emailResponse), {
-      status: 200,
-      headers: {
-        "Content-Type": "application/json",
-        ...corsHeaders,
-      },
+    const adminSend = await resend.emails.send({
+      from: "Rogova Auto Shop <onboarding@resend.dev>",
+      to: [adminEmail],
+      subject: `[Admin Copy] ${emailSubject}`,
+      html: `
+        <div style="font-family: system-ui, -apple-system, Segoe UI, Roboto;">
+          <p style="color:#64748b;font-size:14px;margin:0 0 8px;">Admin copy of the following notification:</p>
+          ${emailContent}
+        </div>
+      `,
     });
+
+    console.log("Customer email result:", customerSend);
+    console.log("Admin email result:", adminSend);
+
+    const bothFailed = !!customerSend.error && !!adminSend.error;
+
+    return new Response(
+      JSON.stringify({ customer: customerSend, admin: adminSend }),
+      {
+        status: bothFailed ? 500 : 200,
+        headers: {
+          "Content-Type": "application/json",
+          ...corsHeaders,
+        },
+      },
+    );
   } catch (error: any) {
     console.error("Error in send-appointment-email function:", error);
     return new Response(
