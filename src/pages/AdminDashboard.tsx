@@ -52,7 +52,7 @@ interface Staff {
 
 interface CompletedService {
   id: string;
-  appointment_id: string;
+  appointment_id: string | null;
   services_performed: any;
   items_purchased: any;
   staff_ids: string[];
@@ -60,9 +60,18 @@ interface CompletedService {
   subtotal: number;
   taxes: number;
   total_cost: number;
-  notes: string;
+  notes: string | null;
   created_at: string;
   payment_method: string;
+  customer_name: string | null;
+  customer_email: string | null;
+  customer_phone: string | null;
+  car_make: string | null;
+  car_model: string | null;
+  car_year: number | null;
+  appointment_date: string | null;
+  appointment_time: string | null;
+  confirmation_number: string | null;
 }
 
 interface GroupedCompletedServices {
@@ -1185,9 +1194,9 @@ export default function AdminDashboard() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="cash">Cash</SelectItem>
-                        <SelectItem value="credit_card">Credit Card</SelectItem>
-                        <SelectItem value="debit_card">Debit Card</SelectItem>
-                        <SelectItem value="check">Check</SelectItem>
+                        <SelectItem value="visa">Visa</SelectItem>
+                        <SelectItem value="mastercard">Mastercard</SelectItem>
+                        <SelectItem value="etransfer">E-Transfer</SelectItem>
                         <SelectItem value="other">Other</SelectItem>
                       </SelectContent>
                     </Select>
@@ -1350,8 +1359,6 @@ export default function AdminDashboard() {
     ];
     
     const rows = completedServices.map(cs => {
-      const appointment = appointments.find(a => a.id === cs.appointment_id);
-      
       const services = cs.services_performed.map((s: any) => s.service).join('; ');
       const serviceCosts = cs.services_performed.map((s: any) => `$${s.cost}`).join('; ');
       
@@ -1365,12 +1372,12 @@ export default function AdminDashboard() {
       const staffNames = getStaffNames(cs.staff_ids || []);
       
       return [
-        cs.created_at ? new Date(cs.created_at).toLocaleDateString() : '',
-        appointment?.confirmation_number || '',
-        appointment?.customer_name || '',
-        appointment?.car_make || '',
-        appointment?.car_model || '',
-        appointment?.car_year?.toString() || '',
+        cs.appointment_date ? new Date(cs.appointment_date).toLocaleDateString() : (cs.created_at ? new Date(cs.created_at).toLocaleDateString() : ''),
+        cs.confirmation_number || '',
+        cs.customer_name || '',
+        cs.car_make || '',
+        cs.car_model || '',
+        cs.car_year?.toString() || '',
         services,
         serviceCosts,
         items,
@@ -1779,18 +1786,17 @@ export default function AdminDashboard() {
                               </TableHeader>
                               <TableBody>
                                 {services.map((cs) => {
-                                  const appointment = appointments.find(a => a.id === cs.appointment_id);
                                   return (
                                     <TableRow key={cs.id}>
                                       <TableCell>
-                                        {new Date(cs.created_at).toLocaleDateString()}
+                                        {cs.appointment_date ? new Date(cs.appointment_date).toLocaleDateString() : new Date(cs.created_at).toLocaleDateString()}
                                       </TableCell>
                                       <TableCell className="font-mono text-xs">
-                                        {appointment?.confirmation_number || 'N/A'}
+                                        {cs.confirmation_number || 'N/A'}
                                       </TableCell>
-                                      <TableCell>{appointment?.customer_name || 'N/A'}</TableCell>
+                                      <TableCell>{cs.customer_name || 'N/A'}</TableCell>
                                       <TableCell className="text-sm">
-                                        {appointment ? `${appointment.car_year} ${appointment.car_make} ${appointment.car_model}` : 'N/A'}
+                                        {cs.car_year && cs.car_make && cs.car_model ? `${cs.car_year} ${cs.car_make} ${cs.car_model}` : 'N/A'}
                                       </TableCell>
                                       <TableCell>
                                         {cs.services_performed.map((s: any) => (
