@@ -31,6 +31,8 @@ interface Appointment {
   car_year: number;
   notes: string | null;
   status: string;
+  created_at: string;
+  updated_at: string;
 }
 
 interface Service {
@@ -1351,6 +1353,52 @@ export default function AdminDashboard() {
     return groupBy === "month" ? groupCompletedServicesByMonth() : groupCompletedServicesByStaff();
   };
 
+  const exportAppointmentsToCSV = () => {
+    const headers = [
+      "Confirmation #", "Customer Name", "Email", "Phone",
+      "Date", "Time", "Services", "Car Make", "Car Model", "Car Year",
+      "Status", "Notes", "Created At"
+    ];
+    
+    const rows = appointments.map(apt => {
+      const serviceNames = getServiceNames(apt.service_ids);
+      
+      return [
+        apt.confirmation_number || '',
+        apt.customer_name || '',
+        apt.customer_email || '',
+        apt.customer_phone || '',
+        new Date(apt.appointment_date).toLocaleDateString(),
+        apt.appointment_time || '',
+        serviceNames || '',
+        apt.car_make || '',
+        apt.car_model || '',
+        apt.car_year?.toString() || '',
+        apt.status || '',
+        apt.notes || '',
+        new Date(apt.created_at).toLocaleDateString()
+      ];
+    });
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `appointments-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+
+    toast({
+      title: "Export successful",
+      description: "Appointments CSV file downloaded",
+    });
+  };
+
   const exportToCSV = () => {
     const headers = [
       "Date", "Confirmation #", "Customer", "Car Make", "Car Model", "Car Year",
@@ -1435,7 +1483,7 @@ export default function AdminDashboard() {
 
             <TabsContent value="appointments">
               <Card className="shadow-strong">
-                <CardHeader className="flex flex-row items-center justify-between">
+                <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-2 sm:space-y-0">
                   <div className="flex items-center gap-4">
                     <CardTitle className="text-lg md:text-xl">All Appointments</CardTitle>
                     <div className="flex gap-2">
@@ -1462,13 +1510,19 @@ export default function AdminDashboard() {
                       </Button>
                     </div>
                   </div>
-                  <Dialog open={addAppointmentDialogOpen} onOpenChange={setAddAppointmentDialogOpen}>
-                    <DialogTrigger asChild>
-                      <Button size="sm">
-                        <Plus className="h-4 w-4 mr-2" />
-                        Add Appointment
-                      </Button>
-                    </DialogTrigger>
+                  <div className="flex gap-2">
+                    <Button onClick={exportAppointmentsToCSV} disabled={appointments.length === 0} size="sm" variant="outline">
+                      <Download className="mr-0 sm:mr-2 h-4 w-4" />
+                      <span className="hidden sm:inline">Export</span>
+                    </Button>
+                    <Dialog open={addAppointmentDialogOpen} onOpenChange={setAddAppointmentDialogOpen}>
+                      <DialogTrigger asChild>
+                        <Button size="sm">
+                          <Plus className="h-4 w-4 mr-0 sm:mr-2" />
+                          <span className="hidden sm:inline">Add Appointment</span>
+                          <span className="sm:hidden">Add</span>
+                        </Button>
+                      </DialogTrigger>
                     <DialogContent className="max-w-[95vw] md:max-w-[600px] max-h-[90vh] overflow-y-auto">
                       <DialogHeader>
                         <DialogTitle>Create New Appointment</DialogTitle>
@@ -1621,6 +1675,7 @@ export default function AdminDashboard() {
                       </div>
                     </DialogContent>
                   </Dialog>
+                  </div>
                 </CardHeader>
                 <CardContent className="px-2 md:px-6">
               {loading ? (
