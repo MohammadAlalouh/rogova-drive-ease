@@ -62,6 +62,7 @@ interface CompletedService {
   total_cost: number;
   notes: string;
   created_at: string;
+  payment_method: string;
 }
 
 interface GroupedCompletedServices {
@@ -91,8 +92,10 @@ export default function AdminDashboard() {
     hoursWorked: "",
     taxRate: "14",
     discount: "",
-    notes: ""
+    notes: "",
+    paymentMethod: "cash" as string
   });
+  const [groupBy, setGroupBy] = useState<"month" | "staff">("month");
   const [staffDialogOpen, setStaffDialogOpen] = useState(false);
   const [editingStaff, setEditingStaff] = useState<Staff | null>(null);
   const [newStaff, setNewStaff] = useState({
@@ -296,7 +299,8 @@ export default function AdminDashboard() {
           subtotal: servicesSubtotal + itemsSubtotal,
           taxes,
           total_cost: totalCost,
-          notes: completionData.notes || null
+          notes: completionData.notes || null,
+          payment_method: completionData.paymentMethod as any
         });
 
       if (completedError) throw completedError;
@@ -349,7 +353,8 @@ export default function AdminDashboard() {
         hoursWorked: "",
         taxRate: "14",
         discount: "",
-        notes: ""
+        notes: "",
+        paymentMethod: "cash"
       });
       fetchData();
     } catch (error: any) {
@@ -692,30 +697,61 @@ export default function AdminDashboard() {
     return grouped;
   };
 
+  const groupCompletedServicesByStaff = (): GroupedCompletedServices => {
+    const grouped: GroupedCompletedServices = {};
+    completedServices.forEach(cs => {
+      const staffNames = getStaffNames(cs.staff_ids) || 'Unassigned';
+      if (!grouped[staffNames]) {
+        grouped[staffNames] = [];
+      }
+      grouped[staffNames].push(cs);
+    });
+    return grouped;
+  };
+
+  const getGroupedServices = (): GroupedCompletedServices => {
+    return groupBy === "month" ? groupCompletedServicesByMonth() : groupCompletedServicesByStaff();
+  };
+
   const exportToCSV = () => {
-    const headers = ["Date", "Confirmation #", "Customer", "Car", "Services", "Items", "Staff", "Hours", "Subtotal", "Taxes", "Total", "Notes"];
+    const headers = [
+      "Date", "Confirmation #", "Customer", "Car Make", "Car Model", "Car Year",
+      "Services", "Service Costs", "Items", "Item Costs", 
+      "Staff", "Hours", "Subtotal", "Taxes", "Total", "Payment Method", "Notes"
+    ];
     
     const rows = completedServices.map(cs => {
       const appointment = appointments.find(a => a.id === cs.appointment_id);
-      const carInfo = appointment ? `${appointment.car_year} ${appointment.car_make} ${appointment.car_model}` : 'N/A';
-      const servicesPerformed = cs.services_performed.map((s: any) => `${s.service}: $${s.cost}`).join('; ');
-      const itemsList = Array.isArray(cs.items_purchased) 
-        ? cs.items_purchased.map((i: any) => `${i.name}: $${i.cost}`).join('; ')
-        : cs.items_purchased || '';
+      
+      const services = cs.services_performed.map((s: any) => s.service).join('; ');
+      const serviceCosts = cs.services_performed.map((s: any) => `$${s.cost}`).join('; ');
+      
+      const items = Array.isArray(cs.items_purchased) 
+        ? cs.items_purchased.map((i: any) => i.name).join('; ')
+        : '';
+      const itemCosts = Array.isArray(cs.items_purchased)
+        ? cs.items_purchased.map((i: any) => `$${i.cost}`).join('; ')
+        : '';
+      
       const staffNames = getStaffNames(cs.staff_ids || []);
       
       return [
         cs.created_at ? new Date(cs.created_at).toLocaleDateString() : '',
         appointment?.confirmation_number || '',
         appointment?.customer_name || '',
-        carInfo,
-        servicesPerformed,
-        itemsList,
+        appointment?.car_make || '',
+        appointment?.car_model || '',
+        appointment?.car_year?.toString() || '',
+        services,
+        serviceCosts,
+        items,
+        itemCosts,
         staffNames,
         cs.hours_worked?.toString() || '0',
         `$${cs.subtotal?.toFixed(2) || '0.00'}`,
         `$${cs.taxes?.toFixed(2) || '0.00'}`,
         `$${cs.total_cost?.toFixed(2) || '0.00'}`,
+        cs.payment_method || '',
         cs.notes || ''
       ];
     });
@@ -783,6 +819,7 @@ export default function AdminDashboard() {
                             <TableHead className="min-w-[150px]">Contact</TableHead>
                             <TableHead className="min-w-[120px]">Date & Time</TableHead>
                             <TableHead className="min-w-[150px]">Services</TableHead>
+                            <TableHead className="min-w-[150px]">Car Info</TableHead>
                             <TableHead className="min-w-[100px]">Status</TableHead>
                             <TableHead className="min-w-[180px]">Actions</TableHead>
                           </TableRow>
@@ -809,6 +846,9 @@ export default function AdminDashboard() {
                             </div>
                           </TableCell>
                           <TableCell>{getServiceNames(appointment.service_ids)}</TableCell>
+                          <TableCell className="text-sm">
+                            {appointment.car_year} {appointment.car_make} {appointment.car_model}
+                          </TableCell>
                           <TableCell>{getStatusBadge(appointment.status)}</TableCell>
                           <TableCell>
                             <div className="flex gap-2 flex-wrap">
@@ -886,21 +926,22 @@ export default function AdminDashboard() {
                               )}
 
                               {appointment.status === 'in_progress' && (
-                                <Dialog open={completionDialogOpen && completingAppointment?.id === appointment.id} onOpenChange={(open) => {
-                                  setCompletionDialogOpen(open);
-                                   if (!open) {
-                                     setCompletingAppointment(null);
-                                     setCompletionData({
-                                       servicesPerformed: [],
-                                       itemsPurchased: [],
-                                       selectedStaff: [],
-                                       hoursWorked: "",
-                                       taxRate: "14",
-                                       discount: "",
-                                       notes: ""
-                                     });
-                                   }
-                                 }}>
+                                 <Dialog open={completionDialogOpen && completingAppointment?.id === appointment.id} onOpenChange={(open) => {
+                                   setCompletionDialogOpen(open);
+                                    if (!open) {
+                                      setCompletingAppointment(null);
+                                      setCompletionData({
+                                        servicesPerformed: [],
+                                        itemsPurchased: [],
+                                        selectedStaff: [],
+                                        hoursWorked: "",
+                                        taxRate: "14",
+                                        discount: "",
+                                        notes: "",
+                                        paymentMethod: "cash"
+                                      });
+                                    }
+                                  }}>
                                   <DialogTrigger asChild>
                                     <Button
                                       size="sm"
@@ -1114,18 +1155,34 @@ export default function AdminDashboard() {
                                          </div>
                                        </div>
 
-                                      <div>
-                                        <Label>Notes</Label>
-                                        <Textarea
-                                          placeholder="Additional notes..."
-                                          value={completionData.notes}
-                                          onChange={(e) => setCompletionData({ ...completionData, notes: e.target.value })}
-                                        />
-                                      </div>
+                                       <div>
+                                         <Label>Payment Method</Label>
+                                         <Select value={completionData.paymentMethod} onValueChange={(value) => setCompletionData({ ...completionData, paymentMethod: value })}>
+                                           <SelectTrigger>
+                                             <SelectValue />
+                                           </SelectTrigger>
+                                           <SelectContent>
+                                             <SelectItem value="cash">Cash</SelectItem>
+                                             <SelectItem value="visa">Visa</SelectItem>
+                                             <SelectItem value="mastercard">Mastercard</SelectItem>
+                                             <SelectItem value="etransfer">eTransfer</SelectItem>
+                                             <SelectItem value="other">Other</SelectItem>
+                                           </SelectContent>
+                                         </Select>
+                                       </div>
 
-                                      <Button onClick={handleCompleteAppointment} className="w-full" disabled={actionLoading === appointment.id}>
-                                        {actionLoading === appointment.id ? "Completing..." : "Complete Appointment"}
-                                      </Button>
+                                       <div>
+                                         <Label>Notes</Label>
+                                         <Textarea
+                                           placeholder="Additional notes..."
+                                           value={completionData.notes}
+                                           onChange={(e) => setCompletionData({ ...completionData, notes: e.target.value })}
+                                         />
+                                       </div>
+
+                                       <Button onClick={handleCompleteAppointment} className="w-full" disabled={actionLoading === appointment.id}>
+                                         {actionLoading === appointment.id ? "Completing..." : "Complete Appointment"}
+                                       </Button>
                                     </div>
                                   </DialogContent>
                                 </Dialog>
@@ -1166,10 +1223,28 @@ export default function AdminDashboard() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="completed">
+         <TabsContent value="completed">
           <Card className="shadow-strong">
             <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-2 sm:space-y-0">
-              <CardTitle className="text-lg md:text-xl">Completed Services</CardTitle>
+              <div className="flex flex-col gap-2 w-full sm:w-auto">
+                <CardTitle className="text-lg md:text-xl">Completed Services</CardTitle>
+                <div className="flex gap-2">
+                  <Button
+                    variant={groupBy === "month" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setGroupBy("month")}
+                  >
+                    By Month
+                  </Button>
+                  <Button
+                    variant={groupBy === "staff" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setGroupBy("staff")}
+                  >
+                    By Staff
+                  </Button>
+                </div>
+              </div>
               <Button onClick={exportToCSV} disabled={completedServices.length === 0} size="sm">
                 <Download className="mr-2 h-4 w-4" />
                 <span className="hidden sm:inline">Export to CSV</span>
@@ -1183,11 +1258,11 @@ export default function AdminDashboard() {
                 <p className="text-muted-foreground">No completed services found</p>
               ) : (
                 <div className="space-y-6">
-                  {Object.entries(groupCompletedServicesByMonth())
+                  {Object.entries(getGroupedServices())
                     .sort((a, b) => new Date(b[1][0].created_at).getTime() - new Date(a[1][0].created_at).getTime())
-                    .map(([monthYear, services]) => (
-                    <div key={monthYear} className="space-y-3">
-                      <h3 className="text-lg font-semibold text-foreground border-b pb-2">{monthYear}</h3>
+                    .map(([groupKey, services]) => (
+                    <div key={groupKey} className="space-y-3">
+                      <h3 className="text-lg font-semibold text-foreground border-b pb-2">{groupKey}</h3>
                       <div className="overflow-x-auto -mx-2 md:mx-0">
                         <div className="inline-block min-w-full align-middle">
                           <div className="overflow-hidden">
@@ -1202,6 +1277,7 @@ export default function AdminDashboard() {
                                   <TableHead className="min-w-[120px]">Items</TableHead>
                                   <TableHead className="min-w-[100px]">Staff</TableHead>
                                   <TableHead className="min-w-[80px]">Hours</TableHead>
+                                  <TableHead className="min-w-[100px]">Payment</TableHead>
                                   <TableHead className="min-w-[100px]">Total</TableHead>
                                 </TableRow>
                               </TableHeader>
@@ -1236,6 +1312,7 @@ export default function AdminDashboard() {
                                       </TableCell>
                                       <TableCell>{getStaffNames(cs.staff_ids)}</TableCell>
                                       <TableCell>{cs.hours_worked}</TableCell>
+                                      <TableCell className="capitalize">{cs.payment_method}</TableCell>
                                       <TableCell className="font-semibold">
                                         ${cs.total_cost.toFixed(2)}
                                       </TableCell>

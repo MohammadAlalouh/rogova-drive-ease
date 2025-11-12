@@ -76,6 +76,7 @@ export type Database = {
           id: string
           items_purchased: Json | null
           notes: string | null
+          payment_method: Database["public"]["Enums"]["payment_method"]
           services_performed: Json | null
           staff_ids: string[] | null
           subtotal: number | null
@@ -90,6 +91,7 @@ export type Database = {
           id?: string
           items_purchased?: Json | null
           notes?: string | null
+          payment_method?: Database["public"]["Enums"]["payment_method"]
           services_performed?: Json | null
           staff_ids?: string[] | null
           subtotal?: number | null
@@ -104,6 +106,7 @@ export type Database = {
           id?: string
           items_purchased?: Json | null
           notes?: string | null
+          payment_method?: Database["public"]["Enums"]["payment_method"]
           services_performed?: Json | null
           staff_ids?: string[] | null
           subtotal?: number | null
@@ -237,6 +240,7 @@ export type Database = {
     Enums: {
       app_role: "admin" | "user"
       appointment_status: "pending" | "in_progress" | "complete" | "cancelled"
+      payment_method: "cash" | "visa" | "mastercard" | "etransfer" | "other"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -366,6 +370,7 @@ export const Constants = {
     Enums: {
       app_role: ["admin", "user"],
       appointment_status: ["pending", "in_progress", "complete", "cancelled"],
+      payment_method: ["cash", "visa", "mastercard", "etransfer", "other"],
     },
   },
 } as const
