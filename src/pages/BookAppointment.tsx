@@ -124,24 +124,49 @@ export default function BookAppointment() {
 
       setSubmitting(true);
 
-      // Check for existing appointments at the same time slot
+      // Calculate total duration for selected services
+      const totalDuration = services
+        .filter(s => selectedServices.includes(s.id))
+        .reduce((sum, s) => sum + s.duration_minutes, 0);
+
+      // Check for overlapping appointments
       const { data: existingAppointments, error: checkError } = await supabase
         .from('appointments')
-        .select('id')
+        .select('appointment_time, service_ids')
         .eq('appointment_date', date.toISOString().split('T')[0])
-        .eq('appointment_time', timeSlot)
         .neq('status', 'cancelled');
 
       if (checkError) throw checkError;
 
+      // Check if new appointment overlaps with existing ones
       if (existingAppointments && existingAppointments.length > 0) {
-        toast({
-          title: "Time slot unavailable",
-          description: "This time slot is already booked. Please select another time.",
-          variant: "destructive",
-        });
-        setSubmitting(false);
-        return;
+        const newStartMinutes = parseInt(timeSlot.split(':')[0]) * 60 + parseInt(timeSlot.split(':')[1]);
+        const newEndMinutes = newStartMinutes + totalDuration;
+
+        for (const apt of existingAppointments) {
+          const existingStartMinutes = parseInt(apt.appointment_time.split(':')[0]) * 60 + 
+                                       parseInt(apt.appointment_time.split(':')[1]);
+          
+          // Calculate duration for existing appointment
+          const existingDuration = services
+            .filter(s => apt.service_ids.includes(s.id))
+            .reduce((sum, s) => sum + s.duration_minutes, 0);
+          
+          const existingEndMinutes = existingStartMinutes + existingDuration;
+
+          // Check for overlap
+          const overlaps = (newStartMinutes < existingEndMinutes) && (newEndMinutes > existingStartMinutes);
+          
+          if (overlaps) {
+            toast({
+              title: "Time slot unavailable",
+              description: "This time slot conflicts with an existing appointment. Please select another time.",
+              variant: "destructive",
+            });
+            setSubmitting(false);
+            return;
+          }
+        }
       }
 
       // Generate confirmation number

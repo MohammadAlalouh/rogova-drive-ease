@@ -1,18 +1,13 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { Resend } from "https://esm.sh/resend@4.0.0";
-
-const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
 interface AppointmentEmailRequest {
   to: string;
-  subject: string;
   customerName: string;
   confirmationNumber: string;
   appointmentDate: string;
@@ -23,23 +18,17 @@ interface AppointmentEmailRequest {
 }
 
 const handler = async (req: Request): Promise<Response> => {
+  console.log("Function invoked, method:", req.method);
+  
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { 
-      to, 
-      customerName, 
-      confirmationNumber, 
-      appointmentDate, 
-      appointmentTime,
-      services,
-      action,
-      notes
-    }: AppointmentEmailRequest = await req.json();
+    const body: AppointmentEmailRequest = await req.json();
+    console.log("Request body received:", body);
 
-    console.log("Sending appointment email:", { to, action, confirmationNumber });
+    const { to, customerName, confirmationNumber, appointmentDate, appointmentTime, services, action, notes } = body;
 
     let emailSubject = "";
     let emailContent = "";
@@ -125,8 +114,13 @@ const handler = async (req: Request): Promise<Response> => {
         break;
     }
 
-    // Send to customer first, then admin (with slight delay to respect rate limits)
-    const adminEmail = Deno.env.get("ADMIN_NOTIFICATION_EMAIL") || "mohammad.alalouh98@gmail.com";
+    const adminEmail = "mohammad.alalouh98@gmail.com";
+    
+    console.log("Attempting to send emails...");
+
+    // Import Resend dynamically to avoid boot-time issues
+    const { Resend } = await import("https://esm.sh/resend@4.0.0");
+    const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 
     const customerSend = await resend.emails.send({
       from: "Rogova Auto Shop <onboarding@resend.dev>",
@@ -135,30 +129,35 @@ const handler = async (req: Request): Promise<Response> => {
       html: emailContent,
     });
 
-    // Simple rate-limit spacing between sends (Resend: 2 req/sec)
+    console.log("Customer email result:", customerSend);
+
+    // Wait 600ms to respect rate limits
     await new Promise((r) => setTimeout(r, 600));
 
     const adminSend = await resend.emails.send({
       from: "Rogova Auto Shop <onboarding@resend.dev>",
       to: [adminEmail],
-      subject: `[Admin Copy] ${emailSubject}`,
+      subject: `[Admin] ${emailSubject}`,
       html: `
-        <div style="font-family: system-ui, -apple-system, Segoe UI, Roboto;">
-          <p style="color:#64748b;font-size:14px;margin:0 0 8px;">Admin copy of the following notification:</p>
-          ${emailContent}
+        <div style="font-family: system-ui; padding: 20px; background: #f3f4f6;">
+          <p style="color:#6b7280; font-size:14px; margin:0 0 16px;">Admin notification copy</p>
+          <div style="background: white; padding: 20px; border-radius: 8px;">
+            ${emailContent}
+          </div>
         </div>
       `,
     });
 
-    console.log("Customer email result:", customerSend);
     console.log("Admin email result:", adminSend);
 
-    const bothFailed = !!customerSend.error && !!adminSend.error;
-
     return new Response(
-      JSON.stringify({ customer: customerSend, admin: adminSend }),
+      JSON.stringify({ 
+        success: true,
+        customer: customerSend, 
+        admin: adminSend 
+      }),
       {
-        status: bothFailed ? 500 : 200,
+        status: 200,
         headers: {
           "Content-Type": "application/json",
           ...corsHeaders,
@@ -166,12 +165,19 @@ const handler = async (req: Request): Promise<Response> => {
       },
     );
   } catch (error: any) {
-    console.error("Error in send-appointment-email function:", error);
+    console.error("ERROR in send-appointment-email:", error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ 
+        success: false,
+        error: error.message,
+        stack: error.stack 
+      }),
       {
         status: 500,
-        headers: { "Content-Type": "application/json", ...corsHeaders },
+        headers: { 
+          "Content-Type": "application/json", 
+          ...corsHeaders 
+        },
       }
     );
   }
