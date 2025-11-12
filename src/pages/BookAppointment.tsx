@@ -621,19 +621,6 @@ export default function BookAppointment() {
 
                   <div className="space-y-2">
                     <Label htmlFor="notes" className="text-base">Additional Notes (Optional)</Label>
-                    <Input
-                      id="carYear"
-                      type="number"
-                      value={carYear}
-                      onChange={(e) => setCarYear(parseInt(e.target.value))}
-                      required
-                      min={1900}
-                      max={new Date().getFullYear() + 1}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="notes">Additional Notes (Optional)</Label>
                     <Textarea
                       id="notes"
                       value={notes}
