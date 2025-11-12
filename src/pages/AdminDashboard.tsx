@@ -62,6 +62,7 @@ interface CompletedService {
   staff_hours: { [key: string]: number };
   subtotal: number;
   taxes: number;
+  discount: number;
   total_cost: number;
   notes: string | null;
   created_at: string;
@@ -348,6 +349,7 @@ export default function AdminDashboard() {
           staff_hours: staffHoursData as any,
           subtotal: servicesSubtotal + itemsSubtotal,
           taxes,
+          discount,
           total_cost: totalCost,
           notes: completionData.notes || completingAppointment.notes || null,
           payment_method: completionData.paymentMethod as any
@@ -1442,7 +1444,7 @@ export default function AdminDashboard() {
       return;
     }
 
-    const headers = ["Date", "Confirmation #", "Customer", "Car Make", "Car Model", "Car Year", "Services", "Service Costs", "Items", "Item Costs", "Hours Worked", "Notes"];
+    const headers = ["Staff Name", "Date", "Confirmation #", "Customer", "Car Make", "Car Model", "Car Year", "Services", "Service Costs", "Items", "Item Costs", "Hours Worked", "Notes"];
     
     const rows = staffServices.map(cs => {
       const servicesStr = cs.services_performed.map((s: any) => s.service).join("; ");
@@ -1458,6 +1460,7 @@ export default function AdminDashboard() {
       const staffHours = cs.staff_hours?.[staffId] || 0;
       
       return [
+        selectedStaff.name,
         cs.appointment_date ? new Date(cs.appointment_date).toLocaleDateString() : new Date(cs.created_at).toLocaleDateString(),
         cs.confirmation_number || "N/A",
         cs.customer_name || "N/A",
@@ -1515,7 +1518,7 @@ export default function AdminDashboard() {
     const headers = [
       "Date", "Confirmation #", "Customer", "Car Make", "Car Model", "Car Year",
       "Services", "Service Costs", "Items", "Item Costs", 
-      ...staffColumns, "Total Hours", "Subtotal", "Taxes", "Total", "Payment Method", "Notes"
+      ...staffColumns, "Total Hours", "Subtotal", "Discount", "Taxes", "Total", "Payment Method", "Notes"
     ];
     
     const rows = completedServices.map(cs => {
@@ -1550,6 +1553,7 @@ export default function AdminDashboard() {
         ...staffHoursColumns,
         cs.hours_worked?.toString() || '0',
         `$${cs.subtotal?.toFixed(2) || '0.00'}`,
+        `$${cs.discount?.toFixed(2) || '0.00'}`,
         `$${cs.taxes?.toFixed(2) || '0.00'}`,
         `$${cs.total_cost?.toFixed(2) || '0.00'}`,
         cs.payment_method || '',
@@ -1983,6 +1987,7 @@ export default function AdminDashboard() {
                                   <TableHead className="min-w-[120px]">Items</TableHead>
                                   <TableHead className="min-w-[100px]">Staff</TableHead>
                                   <TableHead className="min-w-[80px]">Hours</TableHead>
+                                  <TableHead className="min-w-[100px]">Discount</TableHead>
                                   <TableHead className="min-w-[100px]">Payment</TableHead>
                                   <TableHead className="min-w-[100px]">Total</TableHead>
                                   <TableHead className="min-w-[150px]">Notes</TableHead>
@@ -2018,6 +2023,7 @@ export default function AdminDashboard() {
                                       </TableCell>
                                       <TableCell>{getStaffNames(cs.staff_ids)}</TableCell>
                                       <TableCell>{cs.hours_worked}</TableCell>
+                                      <TableCell>${cs.discount?.toFixed(2) || '0.00'}</TableCell>
                                       <TableCell className="capitalize">{cs.payment_method}</TableCell>
                                       <TableCell className="font-semibold">
                                         ${cs.total_cost.toFixed(2)}
