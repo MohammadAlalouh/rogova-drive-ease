@@ -14,7 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { LogOut, Edit, Trash2, CheckCircle, PlayCircle, X, Plus, Download } from "lucide-react";
+import { LogOut, Edit, Trash2, CheckCircle, PlayCircle, X, Plus, Download, Search, DollarSign, Send } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 
 interface Appointment {
@@ -87,12 +87,41 @@ interface GroupedCompletedServices {
   [key: string]: CompletedService[];
 }
 
+interface Paycheck {
+  id: string;
+  staff_id: string;
+  staff_name: string;
+  staff_email: string | null;
+  period_start: string;
+  period_end: string;
+  total_hours: number;
+  hourly_rate: number;
+  total_amount: number;
+  status: string;
+  payment_method: string;
+  notes: string | null;
+  paid_date: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export default function AdminDashboard() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [staff, setStaff] = useState<Staff[]>([]);
   const [completedServices, setCompletedServices] = useState<CompletedService[]>([]);
+  const [paychecks, setPaychecks] = useState<Paycheck[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Search states
+  const [appointmentSearch, setAppointmentSearch] = useState("");
+  const [completedServiceSearch, setCompletedServiceSearch] = useState("");
+  const [paycheckSearch, setPaycheckSearch] = useState("");
+  
+  // Export date filter states
+  const [exportStartDate, setExportStartDate] = useState<Date | undefined>();
+  const [exportEndDate, setExportEndDate] = useState<Date | undefined>();
+  const [showExportDateFilter, setShowExportDateFilter] = useState(false);
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
   const [editDate, setEditDate] = useState<Date>();
   const [editTime, setEditTime] = useState("");
@@ -153,6 +182,21 @@ export default function AdminDashboard() {
     price_range: "",
     duration_minutes: 60
   });
+  
+  // Paycheck states
+  const [paycheckDialogOpen, setPaycheckDialogOpen] = useState(false);
+  const [editingPaycheck, setEditingPaycheck] = useState<Paycheck | null>(null);
+  const [newPaycheck, setNewPaycheck] = useState({
+    staff_id: "",
+    period_start: undefined as Date | undefined,
+    period_end: undefined as Date | undefined,
+    total_hours: "",
+    hourly_rate: "",
+    notes: "",
+    payment_method: "cash" as string,
+  });
+  const [sendPaycheckEmailLoading, setSendPaycheckEmailLoading] = useState<string | null>(null);
+  
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -214,7 +258,7 @@ export default function AdminDashboard() {
 
   const fetchData = async () => {
     try {
-      const [appointmentsRes, servicesRes, staffRes, completedRes] = await Promise.all([
+      const [appointmentsRes, servicesRes, staffRes, completedRes, paychecksRes] = await Promise.all([
         supabase
           .from('appointments')
           .select('*')
@@ -222,30 +266,33 @@ export default function AdminDashboard() {
           .order('appointment_time', { ascending: true }),
         supabase
           .from('services')
-          .select('*'),
-        supabase
-          .from('staff' as any)
           .select('*')
+          .order('name'),
+        supabase
+          .from('staff')
+          .select('*')
+          .eq('is_active', true)
           .order('name'),
         supabase
           .from('completed_services')
           .select('*')
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('staff_paychecks')
+          .select('*')
           .order('created_at', { ascending: false })
       ]);
 
-      if (appointmentsRes.error) throw appointmentsRes.error;
-      if (servicesRes.error) throw servicesRes.error;
-      if (staffRes.error) throw staffRes.error;
-      if (completedRes.error) throw completedRes.error;
-
-      setAppointments(appointmentsRes.data || []);
-      setServices(servicesRes.data || []);
-      setStaff(staffRes.data as any || []);
-      setCompletedServices(completedRes.data as any || []);
-    } catch (error: any) {
+      if (appointmentsRes.data) setAppointments(appointmentsRes.data);
+      if (servicesRes.data) setServices(servicesRes.data);
+      if (staffRes.data) setStaff(staffRes.data);
+      if (completedRes.data) setCompletedServices(completedRes.data);
+      if (paychecksRes.data) setPaychecks(paychecksRes.data);
+    } catch (error) {
+      console.error('Error fetching data:', error);
       toast({
-        title: "Error loading data",
-        description: error.message,
+        title: "Error",
+        description: "Failed to fetch data",
         variant: "destructive",
       });
     } finally {
@@ -256,6 +303,7 @@ export default function AdminDashboard() {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     navigate('/admin/login');
+  };
   };
 
   const getServiceNames = (serviceIds: string[]) => {
@@ -729,6 +777,315 @@ export default function AdminDashboard() {
     } catch (error: any) {
       toast({
         title: "Error deleting staff",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // ==================== PAYCHECK MANAGEMENT FUNCTIONS ====================
+
+  const handleSavePaycheck = async () => {
+    if (actionLoading) return;
+
+    // Validation
+    if (!newPaycheck.staff_id) {
+      toast({
+        title: "Missing information",
+        description: "Please select a staff member",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!newPaycheck.period_start || !newPaycheck.period_end) {
+      toast({
+        title: "Missing dates",
+        description: "Please select period start and end dates",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!newPaycheck.total_hours || !newPaycheck.hourly_rate) {
+      toast({
+        title: "Missing information",
+        description: "Please enter total hours and hourly rate",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setActionLoading("paycheck-save");
+
+    try {
+      const selectedStaff = staff.find(s => s.id === newPaycheck.staff_id);
+      if (!selectedStaff) throw new Error("Staff member not found");
+
+      const totalHours = parseFloat(newPaycheck.total_hours);
+      const hourlyRate = parseFloat(newPaycheck.hourly_rate);
+      const totalAmount = totalHours * hourlyRate;
+
+      const paycheckData = {
+        staff_id: newPaycheck.staff_id,
+        staff_name: selectedStaff.name,
+        staff_email: selectedStaff.email,
+        period_start: newPaycheck.period_start.toISOString().split('T')[0],
+        period_end: newPaycheck.period_end.toISOString().split('T')[0],
+        total_hours: totalHours,
+        hourly_rate: hourlyRate,
+        total_amount: totalAmount,
+        status: 'unpaid',
+        payment_method: newPaycheck.payment_method,
+        notes: newPaycheck.notes || null,
+      };
+
+      if (editingPaycheck) {
+        const { error } = await supabase
+          .from('staff_paychecks')
+          .update(paycheckData)
+          .eq('id', editingPaycheck.id);
+
+        if (error) throw error;
+        toast({ title: "Paycheck updated successfully" });
+      } else {
+        const { error } = await supabase
+          .from('staff_paychecks')
+          .insert([paycheckData]);
+
+        if (error) throw error;
+        toast({ title: "Paycheck created successfully" });
+      }
+
+      setPaycheckDialogOpen(false);
+      setEditingPaycheck(null);
+      setNewPaycheck({
+        staff_id: "",
+        period_start: undefined,
+        period_end: undefined,
+        total_hours: "",
+        hourly_rate: "",
+        notes: "",
+        payment_method: "cash",
+      });
+      fetchData();
+    } catch (error: any) {
+      toast({
+        title: "Error saving paycheck",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleMarkPaycheckPaid = async (paycheck: Paycheck) => {
+    if (actionLoading) return;
+    setActionLoading(paycheck.id);
+
+    try {
+      const { error } = await supabase
+        .from('staff_paychecks')
+        .update({
+          status: 'paid',
+          paid_date: new Date().toISOString(),
+        })
+        .eq('id', paycheck.id);
+
+      if (error) throw error;
+
+      toast({ title: "Paycheck marked as paid" });
+      fetchData();
+    } catch (error: any) {
+      toast({
+        title: "Error updating paycheck",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleDeletePaycheck = async (paycheckId: string) => {
+    if (!confirm("Are you sure you want to delete this paycheck?")) return;
+    if (actionLoading) return;
+    setActionLoading(paycheckId);
+
+    try {
+      const { error } = await supabase
+        .from('staff_paychecks')
+        .delete()
+        .eq('id', paycheckId);
+
+      if (error) throw error;
+
+      toast({ title: "Paycheck deleted" });
+      fetchData();
+    } catch (error: any) {
+      toast({
+        title: "Error deleting paycheck",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleSendPaycheckEmail = async (paycheck: Paycheck) => {
+    if (!paycheck.staff_email) {
+      toast({
+        title: "No email address",
+        description: "This staff member does not have an email address",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (paycheck.status !== 'paid') {
+      toast({
+        title: "Paycheck not paid",
+        description: "Please mark the paycheck as paid before sending email",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSendPaycheckEmailLoading(paycheck.id);
+
+    try {
+      const { error } = await supabase.functions.invoke("send-paycheck-email", {
+        body: {
+          staffName: paycheck.staff_name,
+          staffEmail: paycheck.staff_email,
+          periodStart: paycheck.period_start,
+          periodEnd: paycheck.period_end,
+          totalHours: paycheck.total_hours,
+          hourlyRate: paycheck.hourly_rate,
+          totalAmount: paycheck.total_amount,
+          paymentMethod: paycheck.payment_method,
+          paidDate: paycheck.paid_date!,
+          notes: paycheck.notes,
+        },
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Email sent",
+        description: `Paycheck email sent to ${paycheck.staff_email}`,
+      });
+    } catch (error: any) {
+      console.error("Error sending paycheck email:", error);
+      toast({
+        title: "Error sending email",
+        description: error.message || "Failed to send paycheck email",
+        variant: "destructive",
+      });
+    } finally {
+      setSendPaycheckEmailLoading(null);
+    }
+  };
+
+  const handleGeneratePaychecksFromCompletedServices = async () => {
+    if (actionLoading) return;
+
+    if (!exportStartDate || !exportEndDate) {
+      toast({
+        title: "Missing dates",
+        description: "Please select start and end dates",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setActionLoading("generate-paychecks");
+
+    try {
+      const startDate = exportStartDate.toISOString().split('T')[0];
+      const endDate = exportEndDate.toISOString().split('T')[0];
+
+      // Get completed services in date range
+      const { data: services, error } = await supabase
+        .from('completed_services')
+        .select('*')
+        .gte('created_at', startDate)
+        .lte('created_at', endDate + 'T23:59:59');
+
+      if (error) throw error;
+      if (!services || services.length === 0) {
+        toast({
+          title: "No data found",
+          description: "No completed services found in the selected date range",
+        });
+        return;
+      }
+
+      // Aggregate hours by staff
+      const staffHours: { [key: string]: { hours: number; name: string; email: string | null } } = {};
+
+      services.forEach((service: any) => {
+        if (service.staff_hours && typeof service.staff_hours === 'object') {
+          Object.entries(service.staff_hours).forEach(([staffId, hours]) => {
+            if (!staffHours[staffId]) {
+              const staffMember = staff.find(s => s.id === staffId);
+              if (staffMember) {
+                staffHours[staffId] = {
+                  hours: 0,
+                  name: staffMember.name,
+                  email: staffMember.email,
+                };
+              }
+            }
+            if (staffHours[staffId]) {
+              staffHours[staffId].hours += Number(hours);
+            }
+          });
+        }
+      });
+
+      if (Object.keys(staffHours).length === 0) {
+        toast({
+          title: "No staff hours found",
+          description: "No staff hours recorded in completed services for this period",
+        });
+        return;
+      }
+
+      // Create paychecks
+      const paychecksToCreate = Object.entries(staffHours).map(([staffId, data]) => ({
+        staff_id: staffId,
+        staff_name: data.name,
+        staff_email: data.email,
+        period_start: startDate,
+        period_end: endDate,
+        total_hours: data.hours,
+        hourly_rate: 0, // Admin needs to fill this
+        total_amount: 0,
+        status: 'unpaid',
+        payment_method: 'cash',
+        notes: 'Auto-generated from completed services',
+      }));
+
+      const { error: insertError } = await supabase
+        .from('staff_paychecks')
+        .insert(paychecksToCreate);
+
+      if (insertError) throw insertError;
+
+      toast({
+        title: "Paychecks generated",
+        description: `Created ${paychecksToCreate.length} paycheck(s). Please update hourly rates.`,
+      });
+
+      fetchData();
+    } catch (error: any) {
+      toast({
+        title: "Error generating paychecks",
         description: error.message,
         variant: "destructive",
       });
