@@ -2022,13 +2022,37 @@ export default function AdminDashboard() {
   };
 
   const exportAppointmentsToCSV = () => {
+    let dataToExport = appointments;
+    
+    // Filter by search if active
+    if (appointmentSearch) {
+      const searchLower = appointmentSearch.toLowerCase();
+      dataToExport = appointments.filter(apt => 
+        apt.customer_name.toLowerCase().includes(searchLower) ||
+        apt.customer_phone.toLowerCase().includes(searchLower) ||
+        apt.customer_email.toLowerCase().includes(searchLower) ||
+        apt.confirmation_number.toLowerCase().includes(searchLower) ||
+        apt.car_make.toLowerCase().includes(searchLower) ||
+        apt.car_model.toLowerCase().includes(searchLower)
+      );
+    }
+
+    // Filter by date range if specified
+    if (exportStartDate && exportEndDate) {
+      const startDate = exportStartDate.toISOString().split('T')[0];
+      const endDate = exportEndDate.toISOString().split('T')[0];
+      dataToExport = dataToExport.filter(apt => 
+        apt.appointment_date >= startDate && apt.appointment_date <= endDate
+      );
+    }
+    
     const headers = [
       "Confirmation #", "Customer Name", "Email", "Phone",
       "Date", "Time", "Services", "Car Make", "Car Model", "Car Year",
       "Status", "Notes", "Created At"
     ];
     
-    const rows = appointments.map(apt => {
+    const rows = dataToExport.map(apt => {
       const serviceNames = getServiceNames(apt.service_ids);
       
       return [
@@ -2244,18 +2268,30 @@ export default function AdminDashboard() {
           </div>
 
           <Tabs defaultValue="appointments" className="space-y-6">
-            <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 h-auto gap-2 p-1">
+            <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 h-auto gap-2 p-1">
               <TabsTrigger value="appointments" className="text-xs sm:text-sm">Appointments</TabsTrigger>
               <TabsTrigger value="services" className="text-xs sm:text-sm">Services</TabsTrigger>
               <TabsTrigger value="staff" className="text-xs sm:text-sm">Staff</TabsTrigger>
               <TabsTrigger value="completed" className="text-xs sm:text-sm">Completed</TabsTrigger>
+              <TabsTrigger value="paychecks" className="text-xs sm:text-sm">Paychecks</TabsTrigger>
             </TabsList>
 
             <TabsContent value="appointments">
               <Card className="shadow-strong">
                 <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-2 sm:space-y-0">
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-4 w-full">
                     <CardTitle className="text-lg md:text-xl">All Appointments</CardTitle>
+                    <div className="flex-1 max-w-md">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          placeholder="Search by name, phone, confirmation..."
+                          value={appointmentSearch}
+                          onChange={(e) => setAppointmentSearch(e.target.value)}
+                          className="pl-9"
+                        />
+                      </div>
+                    </div>
                     <div className="flex gap-2">
                       <Button
                         size="sm"
@@ -2551,11 +2587,25 @@ export default function AdminDashboard() {
           </Card>
         </TabsContent>
 
-         <TabsContent value="completed">
+          <TabsContent value="completed">
           <Card className="shadow-strong">
             <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-2 sm:space-y-0">
-              <div className="flex flex-col gap-2 w-full sm:w-auto">
-                <CardTitle className="text-lg md:text-xl">Completed Services</CardTitle>
+              <div className="flex flex-col gap-4 w-full">
+                <div className="flex items-center justify-between w-full">
+                  <CardTitle className="text-lg md:text-xl">Completed Services</CardTitle>
+                  <div className="flex-1 max-w-md ml-4">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search by customer, car, confirmation..."
+                        value={completedServiceSearch}
+                        onChange={(e) => setCompletedServiceSearch(e.target.value)}
+                        className="pl-9"
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2 w-full sm:w-auto">
                 <div className="flex gap-2">
                   <Button
                     variant={groupBy === "month" ? "default" : "outline"}
@@ -2572,6 +2622,7 @@ export default function AdminDashboard() {
                     By Staff
                   </Button>
                 </div>
+              </div>
               </div>
               <div className="flex gap-2">
                 <Dialog open={staffExportDialogOpen} onOpenChange={setStaffExportDialogOpen}>
@@ -3030,6 +3081,345 @@ export default function AdminDashboard() {
                 </div>
               </div>
               )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Paychecks Tab */}
+        <TabsContent value="paychecks">
+          <Card className="shadow-strong">
+            <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-2 sm:space-y-0">
+              <div className="flex flex-col gap-4 w-full">
+                <div className="flex items-center justify-between w-full">
+                  <CardTitle className="text-lg md:text-xl">Staff Paychecks</CardTitle>
+                  <Dialog open={paycheckDialogOpen} onOpenChange={setPaycheckDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button size="sm" onClick={() => {
+                        setEditingPaycheck(null);
+                        setNewPaycheck({
+                          staff_id: "",
+                          period_start: undefined,
+                          period_end: undefined,
+                          total_hours: "",
+                          hourly_rate: "",
+                          notes: "",
+                          payment_method: "cash",
+                        });
+                      }}>
+                        <Plus className="mr-2 h-4 w-4" /> Add Paycheck
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-2xl">
+                      <DialogHeader>
+                        <DialogTitle>{editingPaycheck ? "Edit Paycheck" : "Create Paycheck"}</DialogTitle>
+                      </DialogHeader>
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label>Staff Member *</Label>
+                            <Select
+                              value={newPaycheck.staff_id}
+                              onValueChange={(value) => setNewPaycheck({ ...newPaycheck, staff_id: value })}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select staff" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {staff.map(s => (
+                                  <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <Label>Payment Method</Label>
+                            <Select
+                              value={newPaycheck.payment_method}
+                              onValueChange={(value) => setNewPaycheck({ ...newPaycheck, payment_method: value })}
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="cash">Cash</SelectItem>
+                                <SelectItem value="credit_card">Credit Card</SelectItem>
+                                <SelectItem value="debit">Debit</SelectItem>
+                                <SelectItem value="e_transfer">E-Transfer</SelectItem>
+                                <SelectItem value="check">Check</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label>Period Start *</Label>
+                            <Calendar
+                              mode="single"
+                              selected={newPaycheck.period_start}
+                              onSelect={(date) => setNewPaycheck({ ...newPaycheck, period_start: date })}
+                              className="border rounded-md"
+                            />
+                          </div>
+                          <div>
+                            <Label>Period End *</Label>
+                            <Calendar
+                              mode="single"
+                              selected={newPaycheck.period_end}
+                              onSelect={(date) => setNewPaycheck({ ...newPaycheck, period_end: date })}
+                              className="border rounded-md"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label>Total Hours *</Label>
+                            <Input
+                              type="number"
+                              step="0.1"
+                              value={newPaycheck.total_hours}
+                              onChange={(e) => setNewPaycheck({ ...newPaycheck, total_hours: e.target.value })}
+                              placeholder="40.0"
+                            />
+                          </div>
+                          <div>
+                            <Label>Hourly Rate ($) *</Label>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              value={newPaycheck.hourly_rate}
+                              onChange={(e) => setNewPaycheck({ ...newPaycheck, hourly_rate: e.target.value })}
+                              placeholder="25.00"
+                            />
+                          </div>
+                        </div>
+
+                        {newPaycheck.total_hours && newPaycheck.hourly_rate && (
+                          <div className="p-4 bg-primary/10 rounded-lg">
+                            <p className="text-lg font-semibold">
+                              Total Amount: ${(parseFloat(newPaycheck.total_hours) * parseFloat(newPaycheck.hourly_rate)).toFixed(2)}
+                            </p>
+                          </div>
+                        )}
+
+                        <div>
+                          <Label>Notes</Label>
+                          <Textarea
+                            value={newPaycheck.notes}
+                            onChange={(e) => setNewPaycheck({ ...newPaycheck, notes: e.target.value })}
+                            placeholder="Additional notes..."
+                            rows={3}
+                          />
+                        </div>
+
+                        <div className="flex justify-end gap-2">
+                          <Button variant="outline" onClick={() => setPaycheckDialogOpen(false)}>
+                            Cancel
+                          </Button>
+                          <Button onClick={handleSavePaycheck} disabled={actionLoading === "paycheck-save"}>
+                            {actionLoading === "paycheck-save" ? "Saving..." : "Save Paycheck"}
+                          </Button>
+                        </div>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <div className="flex-1 max-w-md">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search by staff name..."
+                        value={paycheckSearch}
+                        onChange={(e) => setPaycheckSearch(e.target.value)}
+                        className="pl-9"
+                      />
+                    </div>
+                  </div>
+
+                  <Dialog open={showExportDateFilter} onOpenChange={setShowExportDateFilter}>
+                    <DialogTrigger asChild>
+                      <Button variant="outline" size="sm">
+                        <Download className="mr-2 h-4 w-4" /> Export Paychecks
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Export Paychecks</DialogTitle>
+                        <DialogDescription>Select date range for export</DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-4">
+                        <div>
+                          <Label>Start Date</Label>
+                          <Calendar
+                            mode="single"
+                            selected={exportStartDate}
+                            onSelect={setExportStartDate}
+                            className="border rounded-md"
+                          />
+                        </div>
+                        <div>
+                          <Label>End Date</Label>
+                          <Calendar
+                            mode="single"
+                            selected={exportEndDate}
+                            onSelect={setExportEndDate}
+                            className="border rounded-md"
+                          />
+                        </div>
+                        <Button 
+                          onClick={() => {
+                            // Export logic here
+                            const filteredPaychecks = paychecks.filter(p => {
+                              if (!exportStartDate || !exportEndDate) return true;
+                              const periodStart = new Date(p.period_start);
+                              return periodStart >= exportStartDate && periodStart <= exportEndDate;
+                            });
+
+                            const headers = ["Staff Name", "Period Start", "Period End", "Total Hours", "Hourly Rate", "Total Amount", "Status", "Payment Method", "Paid Date", "Notes"];
+                            const rows = filteredPaychecks.map(p => [
+                              p.staff_name,
+                              new Date(p.period_start).toLocaleDateString(),
+                              new Date(p.period_end).toLocaleDateString(),
+                              p.total_hours.toString(),
+                              `$${p.hourly_rate.toFixed(2)}`,
+                              `$${p.total_amount.toFixed(2)}`,
+                              p.status,
+                              p.payment_method,
+                              p.paid_date ? new Date(p.paid_date).toLocaleDateString() : "N/A",
+                              p.notes || ""
+                            ]);
+
+                            const csvContent = [
+                              headers.join(','),
+                              ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+                            ].join('\n');
+
+                            const blob = new Blob([csvContent], { type: 'text/csv' });
+                            const url = window.URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = `paychecks-${new Date().toISOString().split('T')[0]}.csv`;
+                            a.click();
+                            window.URL.revokeObjectURL(url);
+
+                            toast({ title: "Export successful", description: "Paychecks CSV downloaded" });
+                            setShowExportDateFilter(false);
+                          }}
+                          className="w-full"
+                        >
+                          Export CSV
+                        </Button>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+
+                  <Button 
+                    variant="secondary" 
+                    size="sm"
+                    onClick={() => {
+                      setShowExportDateFilter(true);
+                    }}
+                  >
+                    <DollarSign className="mr-2 h-4 w-4" /> Generate from Services
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+
+            <CardContent>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Staff</TableHead>
+                      <TableHead>Period</TableHead>
+                      <TableHead>Hours</TableHead>
+                      <TableHead>Rate</TableHead>
+                      <TableHead>Total</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {paychecks
+                      .filter(p => p.staff_name.toLowerCase().includes(paycheckSearch.toLowerCase()))
+                      .map(paycheck => (
+                      <TableRow key={paycheck.id}>
+                        <TableCell className="font-medium">{paycheck.staff_name}</TableCell>
+                        <TableCell className="text-sm">
+                          {new Date(paycheck.period_start).toLocaleDateString()} - {new Date(paycheck.period_end).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell>{paycheck.total_hours}h</TableCell>
+                        <TableCell>${paycheck.hourly_rate.toFixed(2)}/h</TableCell>
+                        <TableCell className="font-semibold">${paycheck.total_amount.toFixed(2)}</TableCell>
+                        <TableCell>
+                          <Badge variant={paycheck.status === 'paid' ? 'default' : 'secondary'}>
+                            {paycheck.status.toUpperCase()}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setEditingPaycheck(paycheck);
+                                setNewPaycheck({
+                                  staff_id: paycheck.staff_id,
+                                  period_start: new Date(paycheck.period_start),
+                                  period_end: new Date(paycheck.period_end),
+                                  total_hours: paycheck.total_hours.toString(),
+                                  hourly_rate: paycheck.hourly_rate.toString(),
+                                  notes: paycheck.notes || "",
+                                  payment_method: paycheck.payment_method,
+                                });
+                                setPaycheckDialogOpen(true);
+                              }}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+
+                            {paycheck.status === 'unpaid' && (
+                              <Button
+                                size="sm"
+                                onClick={() => handleMarkPaycheckPaid(paycheck)}
+                                disabled={actionLoading === paycheck.id}
+                              >
+                                <CheckCircle className="h-4 w-4 mr-2" />
+                                Mark Paid
+                              </Button>
+                            )}
+
+                            {paycheck.status === 'paid' && paycheck.staff_email && (
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => handleSendPaycheckEmail(paycheck)}
+                                disabled={sendPaycheckEmailLoading === paycheck.id}
+                              >
+                                <Send className="h-4 w-4 mr-2" />
+                                {sendPaycheckEmailLoading === paycheck.id ? "Sending..." : "Email"}
+                              </Button>
+                            )}
+
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => handleDeletePaycheck(paycheck.id)}
+                              disabled={actionLoading === paycheck.id}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
