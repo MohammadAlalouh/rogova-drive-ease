@@ -1,5 +1,8 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
 import { Navigation } from "@/components/Navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,9 +10,37 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { LogOut, Download, Search } from "lucide-react";
+import { LogOut, Download, Search, Plus, Edit, Trash2 } from "lucide-react";
+
+// Validation schemas
+const serviceSchema = z.object({
+  name: z.string().min(1, "Name is required"),
+  description: z.string().min(1, "Description is required"),
+  price_range: z.string().min(1, "Price range is required"),
+  duration_minutes: z.coerce.number().min(1, "Duration must be at least 1 minute"),
+});
+
+const staffSchema = z.object({
+  name: z.string().min(1, "Name is required"),
+  email: z.string().email("Invalid email").optional().or(z.literal("")),
+  phone: z.string().optional(),
+});
+
+const paycheckSchema = z.object({
+  staff_id: z.string().min(1, "Staff member is required"),
+  period_start: z.string().min(1, "Start date is required"),
+  period_end: z.string().min(1, "End date is required"),
+  total_hours: z.coerce.number().min(0, "Hours must be positive"),
+  hourly_rate: z.coerce.number().min(0, "Rate must be positive"),
+  notes: z.string().optional(),
+});
 
 export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
@@ -23,8 +54,30 @@ export default function AdminDashboard() {
   const [completedServiceSearch, setCompletedServiceSearch] = useState("");
   const [paycheckSearch, setPaycheckSearch] = useState("");
   
+  const [serviceDialogOpen, setServiceDialogOpen] = useState(false);
+  const [staffDialogOpen, setStaffDialogOpen] = useState(false);
+  const [paycheckDialogOpen, setPaycheckDialogOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<any>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<{type: string, id: string} | null>(null);
+  
   const navigate = useNavigate();
   const { toast } = useToast();
+  
+  const serviceForm = useForm({
+    resolver: zodResolver(serviceSchema),
+    defaultValues: { name: "", description: "", price_range: "", duration_minutes: 30 }
+  });
+  
+  const staffForm = useForm({
+    resolver: zodResolver(staffSchema),
+    defaultValues: { name: "", email: "", phone: "" }
+  });
+  
+  const paycheckForm = useForm({
+    resolver: zodResolver(paycheckSchema),
+    defaultValues: { staff_id: "", period_start: "", period_end: "", total_hours: 0, hourly_rate: 0, notes: "" }
+  });
 
   useEffect(() => {
     document.title = "Admin Dashboard | Rogova Auto Shop";
@@ -57,6 +110,145 @@ export default function AdminDashboard() {
   const handleLogout = () => {
     navigate("/admin-login");
     toast({ title: "Logged out" });
+  };
+
+  // Service CRUD
+  const onServiceSubmit = async (data: z.infer<typeof serviceSchema>) => {
+    try {
+      if (editingItem) {
+        const { error } = await supabase
+          .from("services")
+          .update(data as any)
+          .eq("id", editingItem.id);
+        if (error) throw error;
+        toast({ title: "Service updated successfully" });
+      } else {
+        const { error } = await supabase.from("services").insert(data as any);
+        if (error) throw error;
+        toast({ title: "Service created successfully" });
+      }
+      setServiceDialogOpen(false);
+      setEditingItem(null);
+      serviceForm.reset();
+      fetchData();
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    }
+  };
+
+  // Staff CRUD
+  const onStaffSubmit = async (data: z.infer<typeof staffSchema>) => {
+    try {
+      if (editingItem) {
+        const { error } = await supabase
+          .from("staff")
+          .update(data as any)
+          .eq("id", editingItem.id);
+        if (error) throw error;
+        toast({ title: "Staff updated successfully" });
+      } else {
+        const { error } = await supabase.from("staff").insert(data as any);
+        if (error) throw error;
+        toast({ title: "Staff created successfully" });
+      }
+      setStaffDialogOpen(false);
+      setEditingItem(null);
+      staffForm.reset();
+      fetchData();
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    }
+  };
+
+  // Paycheck CRUD
+  const onPaycheckSubmit = async (data: z.infer<typeof paycheckSchema>) => {
+    try {
+      const selectedStaff = staff.find(s => s.id === data.staff_id);
+      const total_amount = data.total_hours * data.hourly_rate;
+      
+      const paycheckData = {
+        ...data,
+        staff_name: selectedStaff?.name || "",
+        staff_email: selectedStaff?.email,
+        total_amount,
+        status: "unpaid"
+      };
+
+      if (editingItem) {
+        const { error } = await supabase
+          .from("staff_paychecks")
+          .update(paycheckData as any)
+          .eq("id", editingItem.id);
+        if (error) throw error;
+        toast({ title: "Paycheck updated successfully" });
+      } else {
+        const { error } = await supabase.from("staff_paychecks").insert(paycheckData as any);
+        if (error) throw error;
+        toast({ title: "Paycheck created successfully" });
+      }
+      setPaycheckDialogOpen(false);
+      setEditingItem(null);
+      paycheckForm.reset();
+      fetchData();
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    }
+  };
+
+  // Delete handler
+  const handleDelete = async () => {
+    if (!itemToDelete) return;
+    
+    try {
+      const tableMap: Record<string, string> = {
+        appointment: "appointments",
+        service: "services",
+        staff: "staff",
+        paycheck: "staff_paychecks"
+      };
+      
+      const tableName = tableMap[itemToDelete.type];
+      if (!tableName) throw new Error("Invalid item type");
+      
+      const { error } = await supabase
+        .from(tableName as any)
+        .delete()
+        .eq("id", itemToDelete.id);
+        
+      if (error) throw error;
+      toast({ title: `${itemToDelete.type} deleted successfully` });
+      setDeleteDialogOpen(false);
+      setItemToDelete(null);
+      fetchData();
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const openEditDialog = (type: string, item: any) => {
+    setEditingItem(item);
+    if (type === "service") {
+      serviceForm.reset(item);
+      setServiceDialogOpen(true);
+    } else if (type === "staff") {
+      staffForm.reset(item);
+      setStaffDialogOpen(true);
+    } else if (type === "paycheck") {
+      paycheckForm.reset({
+        staff_id: item.staff_id,
+        period_start: item.period_start,
+        period_end: item.period_end,
+        total_hours: item.total_hours,
+        hourly_rate: item.hourly_rate,
+        notes: item.notes || ""
+      });
+      setPaycheckDialogOpen(true);
+    }
+  };
+
+  const openDeleteDialog = (type: string, id: string) => {
+    setItemToDelete({ type, id });
+    setDeleteDialogOpen(true);
   };
 
   const exportToCSV = (data: any[], filename: string) => {
@@ -155,6 +347,7 @@ export default function AdminDashboard() {
                             <TableHead>Customer</TableHead>
                             <TableHead>Phone</TableHead>
                             <TableHead>Status</TableHead>
+                            <TableHead>Actions</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -169,6 +362,11 @@ export default function AdminDashboard() {
                                   {apt.status}
                                 </Badge>
                               </TableCell>
+                              <TableCell>
+                                <Button size="sm" variant="destructive" onClick={() => openDeleteDialog("appointment", apt.id)}>
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </TableCell>
                             </TableRow>
                           ))}
                         </TableBody>
@@ -181,8 +379,12 @@ export default function AdminDashboard() {
 
             <TabsContent value="services">
               <Card className="shadow-strong">
-                <CardHeader>
+                <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-2 sm:space-y-0">
                   <CardTitle className="text-lg md:text-xl">Services</CardTitle>
+                  <Button onClick={() => { setEditingItem(null); serviceForm.reset(); setServiceDialogOpen(true); }} size="sm">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add Service
+                  </Button>
                 </CardHeader>
                 <CardContent className="px-2 md:px-6">
                   {loading ? (
@@ -198,6 +400,7 @@ export default function AdminDashboard() {
                             <TableHead>Description</TableHead>
                             <TableHead>Price Range</TableHead>
                             <TableHead>Duration</TableHead>
+                            <TableHead>Actions</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -207,6 +410,16 @@ export default function AdminDashboard() {
                               <TableCell>{service.description}</TableCell>
                               <TableCell>{service.price_range}</TableCell>
                               <TableCell>{service.duration_minutes} min</TableCell>
+                              <TableCell>
+                                <div className="flex gap-2">
+                                  <Button size="sm" variant="outline" onClick={() => openEditDialog("service", service)}>
+                                    <Edit className="h-4 w-4" />
+                                  </Button>
+                                  <Button size="sm" variant="destructive" onClick={() => openDeleteDialog("service", service.id)}>
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </TableCell>
                             </TableRow>
                           ))}
                         </TableBody>
@@ -219,8 +432,12 @@ export default function AdminDashboard() {
 
             <TabsContent value="staff">
               <Card className="shadow-strong">
-                <CardHeader>
+                <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-2 sm:space-y-0">
                   <CardTitle className="text-lg md:text-xl">Staff</CardTitle>
+                  <Button onClick={() => { setEditingItem(null); staffForm.reset(); setStaffDialogOpen(true); }} size="sm">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add Staff
+                  </Button>
                 </CardHeader>
                 <CardContent className="px-2 md:px-6">
                   {loading ? (
@@ -236,6 +453,7 @@ export default function AdminDashboard() {
                             <TableHead>Email</TableHead>
                             <TableHead>Phone</TableHead>
                             <TableHead>Status</TableHead>
+                            <TableHead>Actions</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -248,6 +466,16 @@ export default function AdminDashboard() {
                                 <Badge variant={s.is_active ? 'default' : 'secondary'}>
                                   {s.is_active ? 'Active' : 'Inactive'}
                                 </Badge>
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex gap-2">
+                                  <Button size="sm" variant="outline" onClick={() => openEditDialog("staff", s)}>
+                                    <Edit className="h-4 w-4" />
+                                  </Button>
+                                  <Button size="sm" variant="destructive" onClick={() => openDeleteDialog("staff", s.id)}>
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
                               </TableCell>
                             </TableRow>
                           ))}
@@ -338,6 +566,10 @@ export default function AdminDashboard() {
                         />
                       </div>
                     </div>
+                    <Button onClick={() => { setEditingItem(null); paycheckForm.reset(); setPaycheckDialogOpen(true); }} size="sm">
+                      <Plus className="mr-2 h-4 w-4" />
+                      <span className="hidden sm:inline">Add</span>
+                    </Button>
                     <Button onClick={() => exportToCSV(filteredPaychecks, "paychecks")} size="sm" disabled={filteredPaychecks.length === 0}>
                       <Download className="mr-2 h-4 w-4" />
                       <span className="hidden sm:inline">Export</span>
@@ -360,6 +592,7 @@ export default function AdminDashboard() {
                             <TableHead>Rate</TableHead>
                             <TableHead>Total Amount</TableHead>
                             <TableHead>Status</TableHead>
+                            <TableHead>Actions</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -377,6 +610,16 @@ export default function AdminDashboard() {
                                   {paycheck.status?.toUpperCase()}
                                 </Badge>
                               </TableCell>
+                              <TableCell>
+                                <div className="flex gap-2">
+                                  <Button size="sm" variant="outline" onClick={() => openEditDialog("paycheck", paycheck)}>
+                                    <Edit className="h-4 w-4" />
+                                  </Button>
+                                  <Button size="sm" variant="destructive" onClick={() => openDeleteDialog("paycheck", paycheck.id)}>
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </TableCell>
                             </TableRow>
                           ))}
                         </TableBody>
@@ -389,6 +632,174 @@ export default function AdminDashboard() {
           </Tabs>
         </div>
       </section>
+
+      {/* Service Dialog */}
+      <Dialog open={serviceDialogOpen} onOpenChange={setServiceDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingItem ? "Edit Service" : "Add Service"}</DialogTitle>
+          </DialogHeader>
+          <Form {...serviceForm}>
+            <form onSubmit={serviceForm.handleSubmit(onServiceSubmit)} className="space-y-4">
+              <FormField control={serviceForm.control} name="name" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Name</FormLabel>
+                  <FormControl><Input {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={serviceForm.control} name="description" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Description</FormLabel>
+                  <FormControl><Textarea {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={serviceForm.control} name="price_range" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Price Range</FormLabel>
+                  <FormControl><Input {...field} placeholder="e.g., $50-$100" /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={serviceForm.control} name="duration_minutes" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Duration (minutes)</FormLabel>
+                  <FormControl><Input type="number" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <DialogFooter>
+                <Button type="submit">{editingItem ? "Update" : "Create"}</Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Staff Dialog */}
+      <Dialog open={staffDialogOpen} onOpenChange={setStaffDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingItem ? "Edit Staff" : "Add Staff"}</DialogTitle>
+          </DialogHeader>
+          <Form {...staffForm}>
+            <form onSubmit={staffForm.handleSubmit(onStaffSubmit)} className="space-y-4">
+              <FormField control={staffForm.control} name="name" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Name</FormLabel>
+                  <FormControl><Input {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={staffForm.control} name="email" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Email</FormLabel>
+                  <FormControl><Input type="email" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={staffForm.control} name="phone" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Phone</FormLabel>
+                  <FormControl><Input {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <DialogFooter>
+                <Button type="submit">{editingItem ? "Update" : "Create"}</Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Paycheck Dialog */}
+      <Dialog open={paycheckDialogOpen} onOpenChange={setPaycheckDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingItem ? "Edit Paycheck" : "Add Paycheck"}</DialogTitle>
+          </DialogHeader>
+          <Form {...paycheckForm}>
+            <form onSubmit={paycheckForm.handleSubmit(onPaycheckSubmit)} className="space-y-4">
+              <FormField control={paycheckForm.control} name="staff_id" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Staff Member</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select staff" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {staff.map(s => (
+                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={paycheckForm.control} name="period_start" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Period Start</FormLabel>
+                  <FormControl><Input type="date" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={paycheckForm.control} name="period_end" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Period End</FormLabel>
+                  <FormControl><Input type="date" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={paycheckForm.control} name="total_hours" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Total Hours</FormLabel>
+                  <FormControl><Input type="number" step="0.5" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={paycheckForm.control} name="hourly_rate" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Hourly Rate ($)</FormLabel>
+                  <FormControl><Input type="number" step="0.01" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={paycheckForm.control} name="notes" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Notes (Optional)</FormLabel>
+                  <FormControl><Textarea {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <DialogFooter>
+                <Button type="submit">{editingItem ? "Update" : "Create"}</Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete this {itemToDelete?.type}.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <footer className="bg-foreground text-background py-8">
         <div className="container text-center">
