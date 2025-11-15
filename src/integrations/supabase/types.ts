@@ -253,6 +253,68 @@ export type Database = {
         }
         Relationships: []
       }
+      staff_paychecks: {
+        Row: {
+          created_at: string
+          hourly_rate: number
+          id: string
+          notes: string | null
+          paid_date: string | null
+          payment_method: Database["public"]["Enums"]["payment_method"] | null
+          period_end: string
+          period_start: string
+          staff_email: string | null
+          staff_id: string
+          staff_name: string
+          status: string
+          total_amount: number
+          total_hours: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          hourly_rate?: number
+          id?: string
+          notes?: string | null
+          paid_date?: string | null
+          payment_method?: Database["public"]["Enums"]["payment_method"] | null
+          period_end: string
+          period_start: string
+          staff_email?: string | null
+          staff_id: string
+          staff_name: string
+          status?: string
+          total_amount?: number
+          total_hours?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          hourly_rate?: number
+          id?: string
+          notes?: string | null
+          paid_date?: string | null
+          payment_method?: Database["public"]["Enums"]["payment_method"] | null
+          period_end?: string
+          period_start?: string
+          staff_email?: string | null
+          staff_id?: string
+          staff_name?: string
+          status?: string
+          total_amount?: number
+          total_hours?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_paychecks_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           id: string
