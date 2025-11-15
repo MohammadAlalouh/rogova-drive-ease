@@ -67,6 +67,11 @@ export default function AdminDashboard() {
   const [completedServiceSearch, setCompletedServiceSearch] = useState("");
   const [paycheckSearch, setPaycheckSearch] = useState("");
   
+  const [exportDateFrom, setExportDateFrom] = useState("");
+  const [exportDateTo, setExportDateTo] = useState("");
+  const [showExportDialog, setShowExportDialog] = useState(false);
+  const [exportType, setExportType] = useState<"appointments" | "completed" | "paychecks" | "services" | "staff">("appointments");
+  
   const [serviceDialogOpen, setServiceDialogOpen] = useState(false);
   const [staffDialogOpen, setStaffDialogOpen] = useState(false);
   const [paycheckDialogOpen, setPaycheckDialogOpen] = useState(false);
@@ -348,6 +353,64 @@ export default function AdminDashboard() {
     toast({ title: "Export successful", description: "CSV file downloaded" });
   };
 
+  const handleExport = () => {
+    let dataToExport: any[] = [];
+    let filename = "";
+    
+    switch(exportType) {
+      case "appointments":
+        dataToExport = filteredAppointments;
+        filename = "appointments";
+        break;
+      case "completed":
+        dataToExport = filteredCompleted;
+        filename = "completed-services";
+        break;
+      case "paychecks":
+        dataToExport = filteredPaychecks;
+        filename = "paychecks";
+        break;
+      case "services":
+        dataToExport = services;
+        filename = "services";
+        break;
+      case "staff":
+        dataToExport = staff;
+        filename = "staff";
+        break;
+    }
+    
+    // Filter by date range if specified
+    if (exportDateFrom || exportDateTo) {
+      dataToExport = dataToExport.filter(item => {
+        const itemDate = new Date(
+          item.appointment_date || 
+          item.period_start || 
+          item.created_at
+        );
+        const fromDate = exportDateFrom ? new Date(exportDateFrom) : new Date(0);
+        const toDate = exportDateTo ? new Date(exportDateTo) : new Date();
+        
+        return itemDate >= fromDate && itemDate <= toDate;
+      });
+    }
+    
+    if (dataToExport.length === 0) {
+      toast({ title: "No data to export", variant: "destructive" });
+      return;
+    }
+    
+    exportToCSV(dataToExport, filename);
+    setShowExportDialog(false);
+    setExportDateFrom("");
+    setExportDateTo("");
+  };
+
+  const openExportDialog = (type: "appointments" | "completed" | "paychecks" | "services" | "staff") => {
+    setExportType(type);
+    setShowExportDialog(true);
+  };
+
   const filteredAppointments = appointments.filter(apt =>
     appointmentSearch === "" ||
     apt.customer_name?.toLowerCase().includes(appointmentSearch.toLowerCase()) ||
@@ -405,7 +468,7 @@ export default function AdminDashboard() {
                         />
                       </div>
                     </div>
-                    <Button onClick={() => exportToCSV(filteredAppointments, "appointments")} size="sm" disabled={filteredAppointments.length === 0}>
+                    <Button onClick={() => openExportDialog("appointments")} size="sm" disabled={filteredAppointments.length === 0}>
                       <Download className="mr-2 h-4 w-4" />
                       <span className="hidden sm:inline">Export</span>
                     </Button>
@@ -472,11 +535,19 @@ export default function AdminDashboard() {
             <TabsContent value="services">
               <Card className="shadow-strong">
                 <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-2 sm:space-y-0">
-                  <CardTitle className="text-lg md:text-xl">Services</CardTitle>
-                  <Button onClick={() => { setEditingItem(null); serviceForm.reset(); setServiceDialogOpen(true); }} size="sm">
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add Service
-                  </Button>
+                  <div className="flex items-center gap-4 w-full">
+                    <CardTitle className="text-lg md:text-xl">Services</CardTitle>
+                    <div className="flex gap-2 ml-auto">
+                      <Button onClick={() => openExportDialog("services")} size="sm" disabled={services.length === 0}>
+                        <Download className="mr-2 h-4 w-4" />
+                        <span className="hidden sm:inline">Export</span>
+                      </Button>
+                      <Button onClick={() => { setEditingItem(null); serviceForm.reset(); setServiceDialogOpen(true); }} size="sm">
+                        <Plus className="mr-2 h-4 w-4" />
+                        <span className="hidden sm:inline">Add Service</span>
+                      </Button>
+                    </div>
+                  </div>
                 </CardHeader>
                 <CardContent className="px-2 md:px-6">
                   {loading ? (
@@ -525,11 +596,19 @@ export default function AdminDashboard() {
             <TabsContent value="staff">
               <Card className="shadow-strong">
                 <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-2 sm:space-y-0">
-                  <CardTitle className="text-lg md:text-xl">Staff</CardTitle>
-                  <Button onClick={() => { setEditingItem(null); staffForm.reset(); setStaffDialogOpen(true); }} size="sm">
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add Staff
-                  </Button>
+                  <div className="flex items-center gap-4 w-full">
+                    <CardTitle className="text-lg md:text-xl">Staff</CardTitle>
+                    <div className="flex gap-2 ml-auto">
+                      <Button onClick={() => openExportDialog("staff")} size="sm" disabled={staff.length === 0}>
+                        <Download className="mr-2 h-4 w-4" />
+                        <span className="hidden sm:inline">Export</span>
+                      </Button>
+                      <Button onClick={() => { setEditingItem(null); staffForm.reset(); setStaffDialogOpen(true); }} size="sm">
+                        <Plus className="mr-2 h-4 w-4" />
+                        <span className="hidden sm:inline">Add Staff</span>
+                      </Button>
+                    </div>
+                  </div>
                 </CardHeader>
                 <CardContent className="px-2 md:px-6">
                   {loading ? (
@@ -595,7 +674,7 @@ export default function AdminDashboard() {
                         />
                       </div>
                     </div>
-                    <Button onClick={() => exportToCSV(filteredCompleted, "completed-services")} size="sm" disabled={filteredCompleted.length === 0}>
+                    <Button onClick={() => openExportDialog("completed")} size="sm" disabled={filteredCompleted.length === 0}>
                       <Download className="mr-2 h-4 w-4" />
                       <span className="hidden sm:inline">Export</span>
                     </Button>
@@ -670,7 +749,7 @@ export default function AdminDashboard() {
                       <Plus className="mr-2 h-4 w-4" />
                       <span className="hidden sm:inline">Add</span>
                     </Button>
-                    <Button onClick={() => exportToCSV(filteredPaychecks, "paychecks")} size="sm" disabled={filteredPaychecks.length === 0}>
+                    <Button onClick={() => openExportDialog("paychecks")} size="sm" disabled={filteredPaychecks.length === 0}>
                       <Download className="mr-2 h-4 w-4" />
                       <span className="hidden sm:inline">Export</span>
                     </Button>
@@ -1004,6 +1083,49 @@ export default function AdminDashboard() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Export Date Filter Dialog */}
+      <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Export {exportType === "appointments" ? "Appointments" : exportType === "completed" ? "Completed Services" : exportType === "paychecks" ? "Paychecks" : exportType === "services" ? "Services" : "Staff"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              {exportType === "services" || exportType === "staff" 
+                ? "Export all records to CSV file." 
+                : "Filter by date range (optional). Leave blank to export all records."}
+            </p>
+            {exportType !== "services" && exportType !== "staff" && (
+              <>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">From Date</label>
+                  <Input 
+                    type="date" 
+                    value={exportDateFrom}
+                    onChange={(e) => setExportDateFrom(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">To Date</label>
+                  <Input 
+                    type="date" 
+                    value={exportDateTo}
+                    onChange={(e) => setExportDateTo(e.target.value)}
+                  />
+                </div>
+              </>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowExportDialog(false)}>Cancel</Button>
+            <Button onClick={handleExport}>
+              <Download className="mr-2 h-4 w-4" />
+              Export CSV
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <footer className="bg-foreground text-background py-8">
         <div className="container text-center">
