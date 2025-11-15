@@ -20,6 +20,19 @@ import { useToast } from "@/hooks/use-toast";
 import { LogOut, Download, Search, Plus, Edit, Trash2 } from "lucide-react";
 
 // Validation schemas
+const appointmentSchema = z.object({
+  appointment_date: z.string().min(1, "Date is required"),
+  appointment_time: z.string().min(1, "Time is required"),
+  customer_name: z.string().min(1, "Name is required"),
+  customer_phone: z.string().min(1, "Phone is required"),
+  customer_email: z.string().email("Invalid email"),
+  car_year: z.coerce.number().min(1900, "Invalid year"),
+  car_make: z.string().min(1, "Make is required"),
+  car_model: z.string().min(1, "Model is required"),
+  notes: z.string().optional(),
+  status: z.enum(["pending", "in_progress", "complete", "cancelled"]),
+});
+
 const serviceSchema = z.object({
   name: z.string().min(1, "Name is required"),
   description: z.string().min(1, "Description is required"),
@@ -57,12 +70,29 @@ export default function AdminDashboard() {
   const [serviceDialogOpen, setServiceDialogOpen] = useState(false);
   const [staffDialogOpen, setStaffDialogOpen] = useState(false);
   const [paycheckDialogOpen, setPaycheckDialogOpen] = useState(false);
+  const [appointmentDialogOpen, setAppointmentDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<{type: string, id: string} | null>(null);
   
   const navigate = useNavigate();
   const { toast } = useToast();
+  
+  const appointmentForm = useForm({
+    resolver: zodResolver(appointmentSchema),
+    defaultValues: { 
+      appointment_date: "", 
+      appointment_time: "", 
+      customer_name: "", 
+      customer_phone: "", 
+      customer_email: "",
+      car_year: new Date().getFullYear(),
+      car_make: "",
+      car_model: "",
+      notes: "",
+      status: "pending" as const
+    }
+  });
   
   const serviceForm = useForm({
     resolver: zodResolver(serviceSchema),
@@ -110,6 +140,40 @@ export default function AdminDashboard() {
   const handleLogout = () => {
     navigate("/admin-login");
     toast({ title: "Logged out" });
+  };
+
+  // Appointment CRUD
+  const onAppointmentSubmit = async (data: z.infer<typeof appointmentSchema>) => {
+    try {
+      if (editingItem) {
+        const { error } = await supabase
+          .from("appointments")
+          .update(data as any)
+          .eq("id", editingItem.id);
+        if (error) throw error;
+        toast({ title: "Appointment updated successfully" });
+      }
+      setAppointmentDialogOpen(false);
+      setEditingItem(null);
+      appointmentForm.reset();
+      fetchData();
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const updateAppointmentStatus = async (id: string, status: string) => {
+    try {
+      const { error } = await supabase
+        .from("appointments")
+        .update({ status } as any)
+        .eq("id", id);
+      if (error) throw error;
+      toast({ title: "Status updated successfully" });
+      fetchData();
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    }
   };
 
   // Service CRUD
@@ -204,7 +268,8 @@ export default function AdminDashboard() {
         appointment: "appointments",
         service: "services",
         staff: "staff",
-        paycheck: "staff_paychecks"
+        paycheck: "staff_paychecks",
+        completed: "completed_services"
       };
       
       const tableName = tableMap[itemToDelete.type];
@@ -227,7 +292,21 @@ export default function AdminDashboard() {
 
   const openEditDialog = (type: string, item: any) => {
     setEditingItem(item);
-    if (type === "service") {
+    if (type === "appointment") {
+      appointmentForm.reset({
+        appointment_date: item.appointment_date,
+        appointment_time: item.appointment_time,
+        customer_name: item.customer_name,
+        customer_phone: item.customer_phone,
+        customer_email: item.customer_email,
+        car_year: item.car_year,
+        car_make: item.car_make,
+        car_model: item.car_model,
+        notes: item.notes || "",
+        status: item.status
+      });
+      setAppointmentDialogOpen(true);
+    } else if (type === "service") {
       serviceForm.reset(item);
       setServiceDialogOpen(true);
     } else if (type === "staff") {
@@ -358,14 +437,27 @@ export default function AdminDashboard() {
                               <TableCell className="font-medium">{apt.customer_name}</TableCell>
                               <TableCell>{apt.customer_phone}</TableCell>
                               <TableCell>
-                                <Badge variant={apt.status === 'complete' ? 'default' : 'secondary'}>
-                                  {apt.status}
-                                </Badge>
+                                <Select value={apt.status} onValueChange={(value) => updateAppointmentStatus(apt.id, value)}>
+                                  <SelectTrigger className="w-32">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="pending">Pending</SelectItem>
+                                    <SelectItem value="in_progress">In Progress</SelectItem>
+                                    <SelectItem value="complete">Complete</SelectItem>
+                                    <SelectItem value="cancelled">Cancelled</SelectItem>
+                                  </SelectContent>
+                                </Select>
                               </TableCell>
                               <TableCell>
-                                <Button size="sm" variant="destructive" onClick={() => openDeleteDialog("appointment", apt.id)}>
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
+                                <div className="flex gap-2">
+                                  <Button size="sm" variant="outline" onClick={() => openEditDialog("appointment", apt)}>
+                                    <Edit className="h-4 w-4" />
+                                  </Button>
+                                  <Button size="sm" variant="destructive" onClick={() => openDeleteDialog("appointment", apt.id)}>
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
                               </TableCell>
                             </TableRow>
                           ))}
@@ -522,8 +614,10 @@ export default function AdminDashboard() {
                             <TableHead>Date</TableHead>
                             <TableHead>Customer</TableHead>
                             <TableHead>Vehicle</TableHead>
+                            <TableHead>Confirmation</TableHead>
                             <TableHead>Total Cost</TableHead>
                             <TableHead>Payment Status</TableHead>
+                            <TableHead>Actions</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -534,11 +628,17 @@ export default function AdminDashboard() {
                               </TableCell>
                               <TableCell className="font-medium">{cs.customer_name || 'N/A'}</TableCell>
                               <TableCell>{cs.car_year} {cs.car_make} {cs.car_model}</TableCell>
+                              <TableCell className="text-sm">{cs.confirmation_number || 'N/A'}</TableCell>
                               <TableCell className="font-semibold">${cs.total_cost?.toFixed(2)}</TableCell>
                               <TableCell>
                                 <Badge variant={cs.payment_status === 'paid' ? 'default' : cs.payment_status === 'partial paid' ? 'secondary' : 'destructive'}>
                                   {cs.payment_status || 'unpaid'}
                                 </Badge>
+                              </TableCell>
+                              <TableCell>
+                                <Button size="sm" variant="destructive" onClick={() => openDeleteDialog("completed", cs.id)}>
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
                               </TableCell>
                             </TableRow>
                           ))}
@@ -632,6 +732,110 @@ export default function AdminDashboard() {
           </Tabs>
         </div>
       </section>
+
+      {/* Appointment Edit Dialog */}
+      <Dialog open={appointmentDialogOpen} onOpenChange={setAppointmentDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Edit Appointment</DialogTitle>
+          </DialogHeader>
+          <Form {...appointmentForm}>
+            <form onSubmit={appointmentForm.handleSubmit(onAppointmentSubmit)} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <FormField control={appointmentForm.control} name="appointment_date" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Date</FormLabel>
+                    <FormControl><Input type="date" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={appointmentForm.control} name="appointment_time" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Time</FormLabel>
+                    <FormControl><Input type="time" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              </div>
+              <FormField control={appointmentForm.control} name="customer_name" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Customer Name</FormLabel>
+                  <FormControl><Input {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <div className="grid grid-cols-2 gap-4">
+                <FormField control={appointmentForm.control} name="customer_phone" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Phone</FormLabel>
+                    <FormControl><Input {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={appointmentForm.control} name="customer_email" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl><Input type="email" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                <FormField control={appointmentForm.control} name="car_year" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Year</FormLabel>
+                    <FormControl><Input type="number" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={appointmentForm.control} name="car_make" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Make</FormLabel>
+                    <FormControl><Input {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={appointmentForm.control} name="car_model" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Model</FormLabel>
+                    <FormControl><Input {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              </div>
+              <FormField control={appointmentForm.control} name="status" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Status</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="in_progress">In Progress</SelectItem>
+                      <SelectItem value="complete">Complete</SelectItem>
+                      <SelectItem value="cancelled">Cancelled</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={appointmentForm.control} name="notes" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Notes (Optional)</FormLabel>
+                  <FormControl><Textarea {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <DialogFooter>
+                <Button type="submit">Update Appointment</Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
 
       {/* Service Dialog */}
       <Dialog open={serviceDialogOpen} onOpenChange={setServiceDialogOpen}>
