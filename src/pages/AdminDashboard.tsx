@@ -57,6 +57,8 @@ const paycheckSchema = z.object({
 
 export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [appointments, setAppointments] = useState<any[]>([]);
   const [services, setServices] = useState<any[]>([]);
   const [staff, setStaff] = useState<any[]>([]);
@@ -116,8 +118,49 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     document.title = "Admin Dashboard | Rogova Auto Shop";
-    fetchData();
+    checkAuth();
   }, []);
+
+  const checkAuth = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        toast({ 
+          title: 'Authentication required', 
+          description: 'Please log in to access the dashboard',
+          variant: 'destructive' 
+        });
+        navigate('/admin/login');
+        return;
+      }
+
+      // Verify admin role
+      const { data: roleData, error } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', session.user.id)
+        .eq('role', 'admin')
+        .single();
+
+      if (error || !roleData) {
+        toast({ 
+          title: 'Access denied', 
+          description: 'Admin privileges required',
+          variant: 'destructive' 
+        });
+        navigate('/admin/login');
+        return;
+      }
+
+      setIsAuthenticated(true);
+      setIsAdmin(true);
+      fetchData();
+    } catch (error) {
+      console.error('Auth check failed:', error);
+      navigate('/admin/login');
+    }
+  };
 
   const fetchData = async () => {
     try {
@@ -142,9 +185,30 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleLogout = () => {
-    navigate("/admin-login");
-    toast({ title: "Logged out" });
+  const handleLogout = async () => {
+    try {
+      const { error } = await supabase.auth.signOut();
+      
+      if (error) {
+        console.error('Logout error:', error);
+        toast({
+          title: "Logout failed",
+          description: "There was an error signing out. Please try again.",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      toast({ title: "Logged out successfully" });
+      navigate("/admin/login");
+    } catch (error) {
+      console.error('Logout error:', error);
+      toast({
+        title: "Logout failed",
+        description: "An unexpected error occurred",
+        variant: "destructive"
+      });
+    }
   };
 
   // Appointment CRUD
@@ -428,6 +492,15 @@ export default function AdminDashboard() {
     paycheckSearch === "" ||
     p.staff_name?.toLowerCase().includes(paycheckSearch.toLowerCase())
   );
+
+  // Don't render dashboard content until authenticated
+  if (!isAuthenticated || !isAdmin) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <p className="text-muted-foreground">Verifying credentials...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
