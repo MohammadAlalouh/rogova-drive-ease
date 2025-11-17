@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.81.1";
+import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -11,13 +12,37 @@ interface ReceiptEmailRequest {
   customerEmail: string;
 }
 
+const receiptEmailSchema = z.object({
+  completedServiceId: z.string().uuid("Invalid service ID format"),
+  customerEmail: z.string().email("Invalid email format").max(255)
+});
+
 const handler = async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { completedServiceId, customerEmail }: ReceiptEmailRequest = await req.json();
+    const body = await req.json();
+    
+    // Validate input
+    const validationResult = receiptEmailSchema.safeParse(body);
+    if (!validationResult.success) {
+      console.error("Validation failed:", validationResult.error);
+      return new Response(
+        JSON.stringify({ 
+          success: false,
+          error: "Invalid request data",
+          details: validationResult.error.issues
+        }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        }
+      );
+    }
+
+    const { completedServiceId, customerEmail } = validationResult.data;
     console.log("Receipt email request for:", completedServiceId, customerEmail);
 
     // Initialize Supabase client
