@@ -2,3 +2,12 @@ project_id = "orsqltbspcruzuhwwccc"
 
 [functions.send-appointment-email]
 verify_jwt = false
+
+[functions.send-password-reset-code]
+verify_jwt = false
+
+[functions.send-paycheck-email]
+verify_jwt = false
+
+[functions.send-receipt-email]
+verify_jwt = false

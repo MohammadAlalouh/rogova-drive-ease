@@ -96,14 +96,22 @@ export default function AdminLogin() {
 
     setLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithOtp({
-        email,
-        options: {
-          shouldCreateUser: false,
-        },
-      });
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-password-reset-code`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ email }),
+        }
+      );
 
-      if (error) throw error;
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to send verification code');
+      }
 
       toast({
         title: "Verification code sent",
@@ -136,13 +144,27 @@ export default function AdminLogin() {
 
     setLoading(true);
     try {
-      const { error } = await supabase.auth.verifyOtp({
-        email,
-        token: verificationCode,
-        type: 'email',
-      });
+      // Verify the code against the database
+      const { data: codeData, error: codeError } = await supabase
+        .from('password_reset_codes')
+        .select('*')
+        .eq('email', email)
+        .eq('code', verificationCode)
+        .eq('used', false)
+        .gt('expires_at', new Date().toISOString())
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
 
-      if (error) throw error;
+      if (codeError || !codeData) {
+        throw new Error("Invalid or expired verification code");
+      }
+
+      // Mark code as used
+      await supabase
+        .from('password_reset_codes')
+        .update({ used: true })
+        .eq('id', codeData.id);
 
       toast({
         title: "Code verified",
@@ -193,19 +215,32 @@ export default function AdminLogin() {
 
     setLoading(true);
     try {
-      const { error } = await supabase.auth.updateUser({
-        password: newPassword
-      });
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/update-admin-password`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            email,
+            verificationCode,
+            newPassword,
+          }),
+        }
+      );
 
-      if (error) throw error;
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to update password');
+      }
 
       toast({
         title: "Password updated successfully",
         description: "You can now log in with your new password",
       });
 
-      // Sign out and reset to login
-      await supabase.auth.signOut();
       setResetStep('login');
       setEmail("");
       setVerificationCode("");
