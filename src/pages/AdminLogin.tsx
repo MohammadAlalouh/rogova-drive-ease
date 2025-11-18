@@ -11,28 +11,17 @@ import { useToast } from "@/hooks/use-toast";
 export default function AdminLogin() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [verificationCode, setVerificationCode] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [showForgotPassword, setShowForgotPassword] = useState(false);
-  const [isResettingPassword, setIsResettingPassword] = useState(false);
+  const [resetStep, setResetStep] = useState<'login' | 'email' | 'code' | 'password'>('login');
   const navigate = useNavigate();
   const { toast } = useToast();
 
   useEffect(() => {
     checkUser();
-    checkPasswordReset();
   }, []);
-
-  const checkPasswordReset = async () => {
-    // Check if this is a password reset callback
-    const hashParams = new URLSearchParams(window.location.hash.substring(1));
-    const type = hashParams.get('type');
-    
-    if (type === 'recovery') {
-      setIsResettingPassword(true);
-    }
-  };
 
   const checkUser = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -93,7 +82,7 @@ export default function AdminLogin() {
     }
   };
 
-  const handleForgotPassword = async (e: React.FormEvent) => {
+  const handleSendVerificationCode = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!email) {
@@ -107,19 +96,21 @@ export default function AdminLogin() {
 
     setLoading(true);
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/admin/login`,
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          shouldCreateUser: false,
+        },
       });
 
       if (error) throw error;
 
       toast({
-        title: "Password reset email sent",
-        description: "Check your email for instructions to reset your password",
+        title: "Verification code sent",
+        description: "Check your email for the 6-digit verification code",
       });
       
-      setShowForgotPassword(false);
-      setEmail("");
+      setResetStep('code');
     } catch (error: any) {
       toast({
         title: "Error",
@@ -131,7 +122,46 @@ export default function AdminLogin() {
     }
   };
 
-  const handleResetPassword = async (e: React.FormEvent) => {
+  const handleVerifyCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!verificationCode || verificationCode.length !== 6) {
+      toast({
+        title: "Invalid code",
+        description: "Please enter the 6-digit verification code",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.verifyOtp({
+        email,
+        token: verificationCode,
+        type: 'email',
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Code verified",
+        description: "Now enter your new password",
+      });
+      
+      setResetStep('password');
+    } catch (error: any) {
+      toast({
+        title: "Verification failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!newPassword || !confirmPassword) {
@@ -174,9 +204,11 @@ export default function AdminLogin() {
         description: "You can now log in with your new password",
       });
 
-      // Clear the hash and reset state
-      window.history.replaceState(null, '', '/admin/login');
-      setIsResettingPassword(false);
+      // Sign out and reset to login
+      await supabase.auth.signOut();
+      setResetStep('login');
+      setEmail("");
+      setVerificationCode("");
       setNewPassword("");
       setConfirmPassword("");
     } catch (error: any) {
@@ -199,20 +231,89 @@ export default function AdminLogin() {
           <Card className="shadow-strong">
             <CardHeader>
               <CardTitle>
-                {isResettingPassword ? "Set New Password" : showForgotPassword ? "Reset Password" : "Admin Login"}
+                {resetStep === 'login' ? "Admin Login" : 
+                 resetStep === 'email' ? "Reset Password" :
+                 resetStep === 'code' ? "Enter Verification Code" :
+                 "Set New Password"}
               </CardTitle>
               <CardDescription>
-                {isResettingPassword
-                  ? "Enter your new password below"
-                  : showForgotPassword 
-                    ? "Enter your email to receive password reset instructions"
-                    : "Enter your credentials to access the admin panel"
-                }
+                {resetStep === 'login' ? "Enter your credentials to access the admin panel" :
+                 resetStep === 'email' ? "Enter your email to receive a verification code" :
+                 resetStep === 'code' ? "Enter the 6-digit code sent to your email" :
+                 "Enter your new password"}
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {isResettingPassword ? (
-                <form onSubmit={handleResetPassword} className="space-y-4">
+              {resetStep === 'email' ? (
+                <form onSubmit={handleSendVerificationCode} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                    />
+                  </div>
+
+                  <Button 
+                    type="submit" 
+                    className="w-full bg-primary hover:bg-primary/90"
+                    disabled={loading}
+                  >
+                    {loading ? "Sending..." : "Send Verification Code"}
+                  </Button>
+
+                  <Button 
+                    type="button"
+                    variant="ghost"
+                    className="w-full"
+                    onClick={() => {
+                      setResetStep('login');
+                      setEmail("");
+                    }}
+                  >
+                    Back to Login
+                  </Button>
+                </form>
+              ) : resetStep === 'code' ? (
+                <form onSubmit={handleVerifyCode} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="code">Verification Code</Label>
+                    <Input
+                      id="code"
+                      type="text"
+                      value={verificationCode}
+                      onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      placeholder="Enter 6-digit code"
+                      required
+                      maxLength={6}
+                    />
+                  </div>
+
+                  <Button 
+                    type="submit" 
+                    className="w-full bg-primary hover:bg-primary/90"
+                    disabled={loading}
+                  >
+                    {loading ? "Verifying..." : "Verify Code"}
+                  </Button>
+
+                  <Button 
+                    type="button"
+                    variant="ghost"
+                    className="w-full"
+                    onClick={() => {
+                      setResetStep('email');
+                      setVerificationCode("");
+                    }}
+                  >
+                    Back
+                  </Button>
+                </form>
+              ) : resetStep === 'password' ? (
+                <form onSubmit={handleUpdatePassword} className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="newPassword">New Password</Label>
                     <Input
@@ -243,39 +344,6 @@ export default function AdminLogin() {
                     disabled={loading}
                   >
                     {loading ? "Updating..." : "Update Password"}
-                  </Button>
-                </form>
-              ) : showForgotPassword ? (
-                <form onSubmit={handleForgotPassword} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      required
-                    />
-                  </div>
-
-                  <Button 
-                    type="submit" 
-                    className="w-full bg-primary hover:bg-primary/90"
-                    disabled={loading}
-                  >
-                    {loading ? "Sending..." : "Send Reset Link"}
-                  </Button>
-
-                  <Button 
-                    type="button"
-                    variant="ghost"
-                    className="w-full"
-                    onClick={() => {
-                      setShowForgotPassword(false);
-                      setEmail("");
-                    }}
-                  >
-                    Back to Login
                   </Button>
                 </form>
               ) : (
@@ -314,7 +382,7 @@ export default function AdminLogin() {
                     type="button"
                     variant="link"
                     className="w-full text-sm"
-                    onClick={() => setShowForgotPassword(true)}
+                    onClick={() => setResetStep('email')}
                   >
                     Forgot Password?
                   </Button>
